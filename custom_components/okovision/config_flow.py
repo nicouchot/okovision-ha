@@ -1,54 +1,58 @@
-"""Config flow for Okovision integration."""
+"""Config flow pour l'intégration OkoVision."""
 from __future__ import annotations
 
 import logging
 from typing import Any
+from urllib.parse import urlparse
 
 import aiohttp
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
-from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import OkovisionApiClient, OkovisionApiError, OkovisionAuthError, OkovisionConnectionError
-from .const import CONF_API_KEY, DEFAULT_PORT, DEFAULT_SCAN_INTERVAL, DOMAIN
+from .const import CONF_BASE_URL, CONF_SCAN_INTERVAL, CONF_TOKEN, DEFAULT_SCAN_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 STEP_USER_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_HOST): str,
-        vol.Optional(CONF_PORT, default=DEFAULT_PORT): int,
-        vol.Required(CONF_API_KEY): str,
+        vol.Required(CONF_BASE_URL, description={"suggested_value": "http://192.168.1.100/okovision/ha_api.php"}): str,
+        vol.Required(CONF_TOKEN): str,
         vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): vol.All(
-            int, vol.Range(min=10, max=3600)
+            int, vol.Range(min=30, max=3600)
         ),
     }
 )
 
 
 class OkovisionConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Okovision."""
+    """Gère le flux de configuration OkoVision."""
 
     VERSION = 1
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Handle the initial step."""
+        """Étape initiale : saisie de l'URL et du token."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            host = user_input[CONF_HOST]
-            port = user_input.get(CONF_PORT, DEFAULT_PORT)
-            api_key = user_input[CONF_API_KEY]
+            base_url = user_input[CONF_BASE_URL].strip().rstrip("/")
+            token    = user_input[CONF_TOKEN].strip()
 
-            await self.async_set_unique_id(f"{host}:{port}")
+            # Identifiant unique basé sur le host
+            try:
+                host = urlparse(base_url).netloc or base_url
+            except Exception:
+                host = base_url
+
+            await self.async_set_unique_id(host)
             self._abort_if_unique_id_configured()
 
             session = async_get_clientsession(self.hass)
-            client = OkovisionApiClient(host, api_key, session, port)
+            client = OkovisionApiClient(base_url, token, session)
 
             try:
                 await client.async_test_connection()
@@ -59,12 +63,16 @@ class OkovisionConfigFlow(ConfigFlow, domain=DOMAIN):
             except OkovisionApiError:
                 errors["base"] = "unknown"
             except Exception:
-                _LOGGER.exception("Unexpected exception during Okovision setup")
+                _LOGGER.exception("Erreur inattendue lors de la configuration OkoVision")
                 errors["base"] = "unknown"
             else:
                 return self.async_create_entry(
-                    title=f"Okovision ({host})",
-                    data=user_input,
+                    title=f"OkoVision ({host})",
+                    data={
+                        CONF_BASE_URL:      base_url,
+                        CONF_TOKEN:         token,
+                        CONF_SCAN_INTERVAL: user_input.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+                    },
                 )
 
         return self.async_show_form(

@@ -2,23 +2,22 @@
   "config": {
     "step": {
       "user": {
-        "title": "Configurer Okovision",
-        "description": "Entrez les informations de connexion à votre API Okovision locale.",
+        "title": "Configurer OkoVision",
+        "description": "Renseignez l'URL de votre fichier ha_api.php et le token d'authentification (12 premiers caractères de votre TOKEN serveur).",
         "data": {
-          "host": "Adresse IP ou hostname",
-          "port": "Port",
-          "api_key": "Clé API",
+          "base_url": "URL de l'API (ha_api.php)",
+          "token": "Token d'authentification (12 caractères)",
           "scan_interval": "Intervalle de mise à jour (secondes)"
         }
       }
     },
     "error": {
-      "cannot_connect": "Impossible de se connecter à l'API Okovision. Vérifiez l'adresse et le port.",
-      "invalid_auth": "Clé API invalide ou accès refusé.",
+      "cannot_connect": "Impossible de se connecter à l'API OkoVision. Vérifiez l'URL.",
+      "invalid_auth": "Token invalide ou accès refusé. Vérifiez les 12 premiers caractères de votre TOKEN.",
       "unknown": "Erreur inattendue lors de la connexion."
     },
     "abort": {
-      "already_configured": "Cette instance Okovision est déjà configurée."
+      "already_configured": "Cette instance OkoVision est déjà configurée."
     }
   }
 }

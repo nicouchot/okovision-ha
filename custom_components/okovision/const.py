@@ -1,14 +1,12 @@
-"""Constants for the Okovision integration."""
+"""Constants pour l'intégration OkoVision."""
 
 DOMAIN = "okovision"
-MANUFACTURER = "Okovision"
+MANUFACTURER = "OkoVision"
 
-CONF_HOST = "host"
-CONF_API_KEY = "api_key"
+# Clés de configuration
+CONF_BASE_URL = "base_url"
+CONF_TOKEN = "token"
 CONF_SCAN_INTERVAL = "scan_interval"
 
-DEFAULT_SCAN_INTERVAL = 30  # seconds
-DEFAULT_PORT = 8080
-
-ATTR_SENSOR_ID = "sensor_id"
-ATTR_LAST_UPDATED = "last_updated"
+# Valeurs par défaut
+DEFAULT_SCAN_INTERVAL = 60  # secondes – l'API retourne des données journalières
