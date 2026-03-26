@@ -1,0 +1,11 @@
+{
+  "domain": "okovision",
+  "name": "Okovision",
+  "codeowners": ["@nicouchot"],
+  "config_flow": true,
+  "documentation": "https://github.com/nicouchot/okovision-ha",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "requirements": [],
+  "version": "0.1.0"
+}

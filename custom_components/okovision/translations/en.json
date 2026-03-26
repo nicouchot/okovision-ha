@@ -1,0 +1,24 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Okovision",
+        "description": "Enter the connection details for your local Okovision API.",
+        "data": {
+          "host": "IP address or hostname",
+          "port": "Port",
+          "api_key": "API Key",
+          "scan_interval": "Update interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to the Okovision API. Check the address and port.",
+      "invalid_auth": "Invalid API key or access denied.",
+      "unknown": "Unexpected error while connecting."
+    },
+    "abort": {
+      "already_configured": "This Okovision instance is already configured."
+    }
+  }
+}
