@@ -8,7 +8,6 @@ from typing import Any
 
 from homeassistant.const import UnitOfEnergy, UnitOfMass
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
 from .api import OkovisionApiClient, OkovisionApiError
@@ -17,6 +16,9 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 # ── Compatibilité HA recorder API ─────────────────────────────────────────────
+# Statistiques EXTERNES (source=DOMAIN, statistic_id="okovision:xxx")
+# → indépendantes du recorder du sensor live → aucun conflit possible
+#
 # HA ≥ 2024.11 : StatisticMetaData(mean_type=StatisticMeanType, ...)
 # HA < 2024.11 : StatisticMetaData(has_mean=bool, ...)
 
@@ -25,7 +27,7 @@ try:
         StatisticData,
         StatisticMeanType,
         StatisticMetaData,
-        async_import_statistics,
+        async_add_external_statistics,
     )
 
     def _make_metadata(
@@ -47,7 +49,7 @@ except ImportError:
         StatisticMetaData,
     )
     from homeassistant.components.recorder.statistics import (  # type: ignore[no-redef]
-        async_import_statistics,
+        async_add_external_statistics,
     )
 
     def _make_metadata(  # type: ignore[misc]
@@ -66,21 +68,24 @@ except ImportError:
 
 # ── Statistiques à importer ───────────────────────────────────────────────────
 #
-# entity_key : clé unique_id du sensor HA (doit être TOTAL_INCREASING ou MEASUREMENT)
+# statistic_id externe : "okovision:{entity_key}"
 # api_key    : champ dans la réponse journalière de l'API
-# has_sum    : True  → courbe cumulative progressive (TOTAL_INCREASING)
-# has_mean   : True  → mesure journalière
+# has_sum    : True  → courbe cumulative progressive
+# has_mean   : True  → mesure journalière (ex: prix)
 #
 # Stratégie courbe progressive :
-#   Les entités ciblées sont cumul_kwh / cumul_kg / cumul_cycle (TOTAL_INCREASING).
-#   Leur valeur API est déjà le cumulatif exact depuis le début → on l'injecte
-#   directement comme sum ET state : HA reconstruit automatiquement la courbe 0→actuel.
+#   Les valeurs API cumul_kwh / cumul_kg / cumul_cycle sont déjà le cumulatif
+#   exact depuis le début → injectées directement comme sum ET state.
+#
+# Tableau Énergie HA :
+#   Dans Paramètres → Énergie, sélectionner le statistic_id externe
+#   (ex: "okovision:cumul_kwh") et non le sensor entity.
 
 STATISTICS_CONFIG: list[dict[str, Any]] = [
     {
         "entity_key": "cumul_kwh",
         "api_key":    "cumul_kwh",
-        "name":       "Énergie cumulée",
+        "name":       "OkoVision – Énergie cumulée",
         "unit":       UnitOfEnergy.KILO_WATT_HOUR,
         "has_sum":    True,
         "has_mean":   False,
@@ -88,7 +93,7 @@ STATISTICS_CONFIG: list[dict[str, Any]] = [
     {
         "entity_key": "cumul_kg",
         "api_key":    "cumul_kg",
-        "name":       "Consommation cumulée pellets",
+        "name":       "OkoVision – Consommation cumulée pellets",
         "unit":       UnitOfMass.KILOGRAMS,
         "has_sum":    True,
         "has_mean":   False,
@@ -96,7 +101,7 @@ STATISTICS_CONFIG: list[dict[str, Any]] = [
     {
         "entity_key": "cumul_cycle",
         "api_key":    "cumul_cycle",
-        "name":       "Cycles cumulés",
+        "name":       "OkoVision – Cycles cumulés",
         "unit":       "cycles",
         "has_sum":    True,
         "has_mean":   False,
@@ -104,7 +109,7 @@ STATISTICS_CONFIG: list[dict[str, Any]] = [
     {
         "entity_key": "prix_kwh",
         "api_key":    "prix_kwh",
-        "name":       "Prix énergie (€/kWh)",
+        "name":       "OkoVision – Prix énergie (€/kWh)",
         "unit":       "EUR/kWh",
         "has_sum":    False,
         "has_mean":   True,
@@ -116,7 +121,7 @@ STATISTICS_CONFIG: list[dict[str, Any]] = [
         "entity_key": "cumul_cout_eur",
         "api_key":    None,          # calculé, pas lu directement depuis l'API
         "calc_keys":  ("conso_kwh", "prix_kwh"),
-        "name":       "Coût cumulé chauffage",
+        "name":       "OkoVision – Coût cumulé chauffage",
         "unit":       "EUR",
         "has_sum":    True,
         "has_mean":   False,
@@ -132,9 +137,11 @@ async def async_import_history(
 ) -> dict[str, int]:
     """Backfill des statistiques historiques OkoVision dans le recorder HA.
 
-    Cible les entités TOTAL_INCREASING (cumul_kwh, cumul_kg, cumul_cycle) et
-    prix_kwh. Les valeurs cumulatives de l'API sont injectées directement comme
-    `sum` + `state` → HA reconstruit la courbe progressive sans recalcul.
+    Injecte des statistiques EXTERNES (source=DOMAIN, statistic_id="okovision:xxx")
+    totalement indépendantes des sensors live → aucun conflit avec le recorder.
+
+    Dans le tableau Énergie HA, sélectionner "okovision:cumul_kwh" (et non
+    le sensor sensor.okovision_energie_cumulee) pour éviter les valeurs négatives.
     """
     tz         = dt_util.get_default_time_zone()
     today      = date.today()
@@ -146,34 +153,7 @@ async def async_import_history(
         start_date, end_date, years,
     )
 
-    # ── 1. Résolution entity_id via le registre ───────────────────────────────
-    entity_reg = er.async_get(hass)
-    entities_by_key: dict[str, str] = {}
-
-    for entity_entry in er.async_entries_for_config_entry(entity_reg, entry_id):
-        uid    = entity_entry.unique_id or ""
-        prefix = f"{entry_id}_"
-        if uid.startswith(prefix):
-            key = uid[len(prefix):]
-            entities_by_key[key] = entity_entry.entity_id
-
-    _LOGGER.info(
-        "OkoVision import_history : %d entités trouvées dans le registre",
-        len(entities_by_key),
-    )
-    for k, eid in entities_by_key.items():
-        _LOGGER.debug("  %-20s → %s", k, eid)
-
-    # Vérifie que les entités cibles sont bien présentes
-    missing = [c["entity_key"] for c in STATISTICS_CONFIG if c["entity_key"] not in entities_by_key]
-    if missing:
-        _LOGGER.warning(
-            "OkoVision import_history : entités introuvables : %s – "
-            "rechargez l'intégration puis relancez le service.",
-            missing,
-        )
-
-    # ── 2. Collecte mensuelle ─────────────────────────────────────────────────
+    # ── 1. Collecte mensuelle ──────────────────────────────────────────────────
     all_days: dict[str, dict[str, Any]] = {}
     current = start_date
     total_months = (
@@ -210,21 +190,17 @@ async def async_import_history(
         _LOGGER.warning("OkoVision import_history : aucune donnée reçue depuis l'API")
         return {}
 
-    # ── 2b. Ajout d'aujourd'hui ───────────────────────────────────────────────
-    # CRITIQUE : le recorder HA a déjà créé une entrée pour aujourd'hui avec
-    # sum = delta_depuis_installation (ex: 21 kWh).
-    # Sans ce patch, le tableau Énergie calcule : 21 - 15234 = -15213 → négatif.
-    # On écrase l'entrée d'aujourd'hui avec le cumul correct issu de action=today.
+    # ── 1b. Ajout d'aujourd'hui ───────────────────────────────────────────────
+    # Inclure le cumul live du jour pour que le tableau Énergie soit à jour.
     try:
         today_raw = await client.async_get_today()
         today_str = today.isoformat()
         today_day: dict[str, Any] = {"date": today_str}
-        # Récupère les cumuls live (champs directs dans la réponse action=today)
         for api_key in ("cumul_kwh", "cumul_kg", "cumul_cycle", "prix_kwh", "conso_kwh"):
             val = today_raw.get(api_key)
             if val is not None:
                 today_day[api_key] = val
-        if len(today_day) > 1:  # au moins un cumul disponible
+        if len(today_day) > 1:
             all_days[today_str] = today_day
             _LOGGER.debug(
                 "OkoVision import_history : aujourd'hui ajouté – %s",
@@ -233,37 +209,30 @@ async def async_import_history(
     except OkovisionApiError as err:
         _LOGGER.warning(
             "OkoVision import_history : impossible de récupérer les données live "
-            "d'aujourd'hui – l'entrée incorrecte du recorder ne sera pas corrigée (%s)",
+            "d'aujourd'hui (%s)",
             err,
         )
 
     sorted_days = sorted(all_days.values(), key=lambda d: d["date"])
     _LOGGER.info(
-        "OkoVision import_history : %d jours collectés (dont aujourd'hui) – injection dans le recorder",
+        "OkoVision import_history : %d jours collectés – injection statistiques externes",
         len(sorted_days),
     )
 
-    # ── 3. Injection par statistique ──────────────────────────────────────────
+    # ── 2. Injection par statistique (externe) ────────────────────────────────
     summary: dict[str, int] = {}
 
     for cfg in STATISTICS_CONFIG:
-        entity_key = cfg["entity_key"]
-        api_key    = cfg["api_key"]
-        has_sum    = cfg["has_sum"]
-        has_mean   = cfg["has_mean"]
-
-        entity_id = entities_by_key.get(entity_key)
-        if not entity_id:
-            _LOGGER.warning(
-                "OkoVision import_history : entité '%s' absente du registre – ignoré",
-                entity_key,
-            )
-            continue
+        entity_key  = cfg["entity_key"]
+        api_key     = cfg["api_key"]
+        has_sum     = cfg["has_sum"]
+        has_mean    = cfg["has_mean"]
+        statistic_id = f"{DOMAIN}:{entity_key}"   # ex: "okovision:cumul_kwh"
 
         try:
             metadata = _make_metadata(
-                statistic_id=entity_id,   # ex: "sensor.okovision_energie_cumulee"
-                source="recorder",
+                statistic_id=statistic_id,
+                source=DOMAIN,
                 name=cfg["name"],
                 unit=cfg["unit"],
                 has_mean=has_mean,
@@ -277,8 +246,8 @@ async def async_import_history(
             continue
 
         statistics: list[Any] = []
-        calc_keys  = cfg.get("calc_keys")   # (clé_a, clé_b) pour les champs calculés
-        running_sum = 0.0                   # utilisé uniquement pour cumul_cout_eur
+        calc_keys   = cfg.get("calc_keys")
+        running_sum = 0.0
 
         for day in sorted_days:
             try:
@@ -288,7 +257,6 @@ async def async_import_history(
                 continue
 
             if calc_keys:
-                # Champ calculé : valeur = produit des deux clés (ex: conso_kwh × prix_kwh)
                 a = day.get(calc_keys[0])
                 b = day.get(calc_keys[1])
                 if a is None or b is None:
@@ -310,26 +278,25 @@ async def async_import_history(
                 except (ValueError, TypeError):
                     continue
                 if has_sum:
-                    # cumul_* natif : sum = state = valeur cumulée exacte de l'API
                     statistics.append(StatisticData(start=start, state=value, sum=value))
                 else:
                     statistics.append(StatisticData(start=start, mean=value))
 
         if not statistics:
             _LOGGER.warning(
-                "OkoVision import_history : '%s' (api_key=%s) – aucune valeur dans les données mensuelles",
-                entity_key, api_key,
+                "OkoVision import_history : '%s' – aucune valeur dans les données mensuelles",
+                entity_key,
             )
             continue
 
         try:
-            async_import_statistics(hass, metadata, statistics)
+            async_add_external_statistics(hass, metadata, statistics)
             summary[entity_key] = len(statistics)
             last_val = statistics[-1].sum if has_sum else statistics[-1].mean
             _LOGGER.info(
-                "OkoVision import_history : ✓ %-18s → %4d pts | dernier=%s %s | entity=%s",
+                "OkoVision import_history : ✓ %-18s → %4d pts | dernier=%s %s | id=%s",
                 entity_key, len(statistics),
-                f"{last_val:.2f}", cfg["unit"], entity_id,
+                f"{last_val:.2f}", cfg["unit"], statistic_id,
             )
         except Exception as err:
             _LOGGER.error(
