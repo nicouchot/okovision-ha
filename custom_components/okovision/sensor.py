@@ -78,7 +78,6 @@ LIVE_SENSORS: tuple[OkovisionSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfMass.KILOGRAMS,
         icon="mdi:trash-can",
-        entity_registry_enabled_default=False,
     ),
     OkovisionSensorDescription(
         key="ashtray_percent",
