@@ -1,7 +1,8 @@
-"""Plateforme sensor pour OkoVision (chaudière à pellets)."""
+"""Plateforme sensor OkoVision – capteurs live (silo/cendrier) et daily (J-1 confirmé)."""
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -17,86 +18,20 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, MANUFACTURER
-from .coordinator import OkovisionCoordinator
+from .const import CONF_BASE_URL, DOMAIN, MANUFACTURER
+from .coordinator import OkovisionDailyCoordinator, OkovisionLiveCoordinator
 
+
+# ── Descriptions ─────────────────────────────────────────────────────────────
 
 @dataclass(frozen=True, kw_only=True)
 class OkovisionSensorDescription(SensorEntityDescription):
     """Description étendue avec clé dans coordinator.data."""
-
     data_key: str
 
 
-SENSORS: tuple[OkovisionSensorDescription, ...] = (
-    # ── Températures extérieures ─────────────────────────────────────────────
-    OkovisionSensorDescription(
-        key="tc_ext_max",
-        data_key="tc_ext_max",
-        name="Température extérieure max",
-        device_class=SensorDeviceClass.TEMPERATURE,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        icon="mdi:thermometer-chevron-up",
-    ),
-    OkovisionSensorDescription(
-        key="tc_ext_min",
-        data_key="tc_ext_min",
-        name="Température extérieure min",
-        device_class=SensorDeviceClass.TEMPERATURE,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        icon="mdi:thermometer-chevron-down",
-    ),
-
-    # ── Consommation journalière ──────────────────────────────────────────────
-    OkovisionSensorDescription(
-        key="conso_kg",
-        data_key="conso_kg",
-        name="Consommation pellets du jour",
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        native_unit_of_measurement=UnitOfMass.KILOGRAMS,
-        icon="mdi:fire",
-    ),
-    OkovisionSensorDescription(
-        key="conso_ecs_kg",
-        data_key="conso_ecs_kg",
-        name="Consommation pellets ECS du jour",
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        native_unit_of_measurement=UnitOfMass.KILOGRAMS,
-        icon="mdi:water-boiler",
-    ),
-    OkovisionSensorDescription(
-        key="conso_kwh",
-        data_key="conso_kwh",
-        name="Énergie produite du jour",
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        icon="mdi:lightning-bolt",
-    ),
-
-    # ── Cycles chaudière ─────────────────────────────────────────────────────
-    OkovisionSensorDescription(
-        key="nb_cycle",
-        data_key="nb_cycle",
-        name="Cycles chaudière du jour",
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        native_unit_of_measurement="cycles",
-        icon="mdi:restart",
-    ),
-
-    # ── DJU ──────────────────────────────────────────────────────────────────
-    OkovisionSensorDescription(
-        key="dju",
-        data_key="dju",
-        name="DJU du jour",
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement="DJU",
-        icon="mdi:weather-snowflake-alert",
-    ),
-
-    # ── Silo à pellets ───────────────────────────────────────────────────────
+# Capteurs live – silo et cendrier (mis à jour toutes les N secondes)
+LIVE_SENSORS: tuple[OkovisionSensorDescription, ...] = (
     OkovisionSensorDescription(
         key="silo_remains_kg",
         data_key="silo_remains_kg",
@@ -122,8 +57,13 @@ SENSORS: tuple[OkovisionSensorDescription, ...] = (
         native_unit_of_measurement="%",
         icon="mdi:gauge",
     ),
-
-    # ── Cendrier ─────────────────────────────────────────────────────────────
+    OkovisionSensorDescription(
+        key="silo_last_fill",
+        data_key="silo_last_fill",
+        name="Silo – Dernier remplissage",
+        device_class=SensorDeviceClass.DATE,
+        icon="mdi:calendar-arrow-right",
+    ),
     OkovisionSensorDescription(
         key="ashtray_remains_kg",
         data_key="ashtray_remains_kg",
@@ -133,6 +73,15 @@ SENSORS: tuple[OkovisionSensorDescription, ...] = (
         icon="mdi:trash-can-outline",
     ),
     OkovisionSensorDescription(
+        key="ashtray_capacity_kg",
+        data_key="ashtray_capacity_kg",
+        name="Cendrier – Capacité totale",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfMass.KILOGRAMS,
+        icon="mdi:trash-can",
+        entity_registry_enabled_default=False,
+    ),
+    OkovisionSensorDescription(
         key="ashtray_percent",
         data_key="ashtray_percent",
         name="Cendrier – Niveau de remplissage",
@@ -140,8 +89,80 @@ SENSORS: tuple[OkovisionSensorDescription, ...] = (
         native_unit_of_measurement="%",
         icon="mdi:gauge",
     ),
+    OkovisionSensorDescription(
+        key="ashtray_last_empty",
+        data_key="ashtray_last_empty",
+        name="Cendrier – Dernier vidage",
+        device_class=SensorDeviceClass.DATE,
+        icon="mdi:calendar-arrow-left",
+    ),
 )
 
+# Capteurs daily – données J-1 confirmées (mis à jour 1×/jour après 5h)
+DAILY_SENSORS: tuple[OkovisionSensorDescription, ...] = (
+    OkovisionSensorDescription(
+        key="tc_ext_max",
+        data_key="tc_ext_max",
+        name="Température extérieure max (J-1)",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        icon="mdi:thermometer-chevron-up",
+    ),
+    OkovisionSensorDescription(
+        key="tc_ext_min",
+        data_key="tc_ext_min",
+        name="Température extérieure min (J-1)",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        icon="mdi:thermometer-chevron-down",
+    ),
+    OkovisionSensorDescription(
+        key="conso_kg",
+        data_key="conso_kg",
+        name="Consommation pellets (J-1)",
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement=UnitOfMass.KILOGRAMS,
+        icon="mdi:fire",
+    ),
+    OkovisionSensorDescription(
+        key="conso_ecs_kg",
+        data_key="conso_ecs_kg",
+        name="Consommation pellets ECS (J-1)",
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement=UnitOfMass.KILOGRAMS,
+        icon="mdi:water-boiler",
+    ),
+    OkovisionSensorDescription(
+        key="conso_kwh",
+        data_key="conso_kwh",
+        name="Énergie produite (J-1)",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:lightning-bolt",
+    ),
+    OkovisionSensorDescription(
+        key="nb_cycle",
+        data_key="nb_cycle",
+        name="Cycles chaudière (J-1)",
+        state_class=SensorStateClass.TOTAL,
+        native_unit_of_measurement="cycles",
+        icon="mdi:restart",
+    ),
+    OkovisionSensorDescription(
+        key="dju",
+        data_key="dju",
+        name="DJU (J-1)",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="DJU",
+        icon="mdi:weather-snowflake-alert",
+    ),
+)
+
+
+# ── Setup ─────────────────────────────────────────────────────────────────────
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -149,61 +170,95 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Configure les entités sensor OkoVision."""
-    coordinator: OkovisionCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(
-        OkovisionSensor(coordinator, description, entry)
-        for description in SENSORS
+    coordinators = hass.data[DOMAIN][entry.entry_id]
+    live_coord  = coordinators["live"]
+    daily_coord = coordinators["daily"]
+
+    entities: list[SensorEntity] = []
+
+    entities.extend(
+        OkovisionLiveSensor(live_coord, desc, entry)
+        for desc in LIVE_SENSORS
+    )
+    entities.extend(
+        OkovisionDailySensor(daily_coord, desc, entry)
+        for desc in DAILY_SENSORS
+    )
+
+    async_add_entities(entities)
+
+
+# ── Entité de base ────────────────────────────────────────────────────────────
+
+def _device_info(entry: ConfigEntry) -> DeviceInfo:
+    return DeviceInfo(
+        identifiers={(DOMAIN, entry.entry_id)},
+        name="OkoVision",
+        manufacturer=MANUFACTURER,
+        model="Chaudière à pellets",
+        configuration_url=entry.data.get(CONF_BASE_URL),
     )
 
 
-class OkovisionSensor(CoordinatorEntity[OkovisionCoordinator], SensorEntity):
-    """Entité sensor OkoVision."""
+# ── Sensors live ─────────────────────────────────────────────────────────────
+
+class OkovisionLiveSensor(CoordinatorEntity[OkovisionLiveCoordinator], SensorEntity):
+    """Capteur live OkoVision (silo / cendrier)."""
 
     _attr_has_entity_name = True
     entity_description: OkovisionSensorDescription
 
     def __init__(
         self,
-        coordinator: OkovisionCoordinator,
+        coordinator: OkovisionLiveCoordinator,
         description: OkovisionSensorDescription,
         entry: ConfigEntry,
     ) -> None:
-        """Initialise le sensor."""
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="OkoVision",
-            manufacturer=MANUFACTURER,
-            model="Chaudière à pellets",
-            configuration_url=entry.data.get("base_url"),
-        )
+        self._attr_device_info = _device_info(entry)
 
     @property
     def native_value(self) -> Any:
-        """Retourne la valeur depuis coordinator.data."""
-        value = self.coordinator.data.get(self.entity_description.data_key)
-        # Ne pas exposer la valeur si l'API remonte une erreur sur ce sous-bloc
-        if self.entity_description.data_key.startswith("silo_") and self.coordinator.data.get("silo_error"):
+        error_key = "silo_error" if self.entity_description.data_key.startswith("silo_") else "ashtray_error"
+        if self.coordinator.data.get(error_key):
             return None
-        if self.entity_description.data_key.startswith("ashtray_") and self.coordinator.data.get("ashtray_error"):
-            return None
-        return value
+        return self.coordinator.data.get(self.entity_description.data_key)
+
+
+# ── Sensors daily ─────────────────────────────────────────────────────────────
+
+class OkovisionDailySensor(CoordinatorEntity[OkovisionDailyCoordinator], SensorEntity):
+    """Capteur J-1 OkoVision (données confirmées après 5h du matin)."""
+
+    _attr_has_entity_name = True
+    entity_description: OkovisionSensorDescription
+
+    def __init__(
+        self,
+        coordinator: OkovisionDailyCoordinator,
+        description: OkovisionSensorDescription,
+        entry: ConfigEntry,
+    ) -> None:
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._attr_unique_id = f"{entry.entry_id}_{description.key}"
+        self._attr_device_info = _device_info(entry)
+
+    @property
+    def native_value(self) -> Any:
+        return self.coordinator.data.get(self.entity_description.data_key)
+
+    @property
+    def last_reset(self):
+        """Minuit de J-1 – permet à HA d'affecter la valeur au bon jour."""
+        if self.state_class == SensorStateClass.TOTAL:
+            return self.coordinator.data.get("last_reset")
+        return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Attributs supplémentaires selon le capteur."""
-        attrs: dict[str, Any] = {}
-        data = self.coordinator.data
-
-        if self.entity_description.key == "silo_remains_kg":
-            attrs["last_fill_date"] = data.get("silo_last_fill")
-            attrs["capacity_kg"]    = data.get("silo_capacity_kg")
-        elif self.entity_description.key == "ashtray_remains_kg":
-            attrs["last_empty_date"]  = data.get("ashtray_last_empty")
-            attrs["needs_emptying"]   = data.get("ashtray_needs_emptying")
-        elif self.entity_description.key in ("conso_kg", "conso_ecs_kg", "conso_kwh", "nb_cycle", "dju"):
-            attrs["date"] = data.get("date")
-
-        return attrs
+        """Date de référence (J-1) exposée en attribut."""
+        ref: date | None = self.coordinator.data.get("date")
+        return {"reference_date": ref.isoformat() if ref else None}
