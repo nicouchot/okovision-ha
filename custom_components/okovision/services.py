@@ -181,7 +181,7 @@ async def async_import_history(
                 "OkoVision import_history : %02d/%04d ✓ (%d/%d – %d jours cumulés)",
                 current.month, current.year, fetched, total_months, len(all_days),
             )
-        except OkovisionApiError as err:
+        except OkovisionApiError as err:  # noqa: PERF203
             _LOGGER.warning(
                 "OkoVision import_history : erreur %02d/%04d – %s (ignoré)",
                 current.month, current.year, err,
@@ -198,9 +198,36 @@ async def async_import_history(
         _LOGGER.warning("OkoVision import_history : aucune donnée reçue depuis l'API")
         return {}
 
+    # ── 2b. Ajout d'aujourd'hui ───────────────────────────────────────────────
+    # CRITIQUE : le recorder HA a déjà créé une entrée pour aujourd'hui avec
+    # sum = delta_depuis_installation (ex: 21 kWh).
+    # Sans ce patch, le tableau Énergie calcule : 21 - 15234 = -15213 → négatif.
+    # On écrase l'entrée d'aujourd'hui avec le cumul correct issu de action=today.
+    try:
+        today_raw = await client.async_get_today()
+        today_str = today.isoformat()
+        today_day: dict[str, Any] = {"date": today_str}
+        # Récupère les cumuls live (champs directs dans la réponse action=today)
+        for api_key in ("cumul_kwh", "cumul_kg", "cumul_cycle", "prix_kwh"):
+            val = today_raw.get(api_key)
+            if val is not None:
+                today_day[api_key] = val
+        if len(today_day) > 1:  # au moins un cumul disponible
+            all_days[today_str] = today_day
+            _LOGGER.debug(
+                "OkoVision import_history : aujourd'hui ajouté – %s",
+                {k: v for k, v in today_day.items() if k != "date"},
+            )
+    except OkovisionApiError as err:
+        _LOGGER.warning(
+            "OkoVision import_history : impossible de récupérer les données live "
+            "d'aujourd'hui – l'entrée incorrecte du recorder ne sera pas corrigée (%s)",
+            err,
+        )
+
     sorted_days = sorted(all_days.values(), key=lambda d: d["date"])
     _LOGGER.info(
-        "OkoVision import_history : %d jours collectés – injection dans le recorder",
+        "OkoVision import_history : %d jours collectés (dont aujourd'hui) – injection dans le recorder",
         len(sorted_days),
     )
 
