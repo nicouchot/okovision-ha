@@ -16,12 +16,14 @@ Se connecte à `ha_api.php` via polling REST.
 |--------|-------------|-------|
 | Silo – Pellets restants | Stock estimé | kg |
 | Silo – Niveau | % de remplissage | % |
+| Silo – Capacité totale | Capacité max du silo | kg |
 | Silo – Dernier remplissage | Date du dernier remplissage | date |
-| Silo – Capacité totale *(désactivé par défaut)* | Capacité max | kg |
 | Cendrier – Capacité restante | Avant saturation | kg |
 | Cendrier – Niveau de remplissage | % de remplissage | % |
+| Cendrier – Capacité totale | Capacité max du cendrier | kg |
 | Cendrier – Dernier vidage | Date du dernier vidage | date |
-| Cendrier – Capacité totale *(désactivé par défaut)* | Capacité max | kg |
+| Dernier ramonage | Date du dernier ramonage (SWEEP) | date |
+| Dernière maintenance | Date de la dernière maintenance (MAINT) | date |
 
 ### Capteurs journaliers J-1 – Données confirmées
 > Mis à jour toutes les 30 min – données disponibles après ~5h du matin pour la veille
@@ -59,8 +61,8 @@ Se connecte à `ha_api.php` via polling REST.
 
 | Champ | Description | Exemple |
 |-------|-------------|---------|
-| URL de l'API | URL complète vers `ha_api.php` | `https://okovision.ruemoll.com/ha_api.php` |
-| Token | 12 premiers caractères du TOKEN serveur | `9c3a8f79dc08` |
+| URL de l'API | URL complète vers `ha_api.php` | `http://192.168.1.100/ha_api.php` |
+| Token | 12 premiers caractères du TOKEN serveur | `a1b2c3d4e5f6` |
 | Intervalle de mise à jour | Polling live en secondes (min 30) | `60` |
 
 ---

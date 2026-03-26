@@ -18,7 +18,7 @@ _LOGGER = logging.getLogger(__name__)
 
 STEP_USER_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_BASE_URL, description={"suggested_value": "http://192.168.1.100/okovision/ha_api.php"}): str,
+        vol.Required(CONF_BASE_URL, description={"suggested_value": "http://192.168.1.100/ha_api.php"}): str,
         vol.Required(CONF_TOKEN): str,
         vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): vol.All(
             int, vol.Range(min=30, max=3600)

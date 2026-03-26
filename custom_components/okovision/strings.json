@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Configurer OkoVision",
-        "description": "Renseignez l'URL de votre fichier ha_api.php et le token d'authentification (12 premiers caractères de votre TOKEN serveur).",
+        "description": "Renseignez l'URL de votre fichier ha_api.php (ex : http://192.168.1.100/ha_api.php) et le token d'authentification (12 premiers caractères de votre TOKEN serveur).",
         "data": {
           "base_url": "URL de l'API (ha_api.php)",
           "token": "Token d'authentification (12 caractères)",

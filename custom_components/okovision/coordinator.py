@@ -45,8 +45,9 @@ class OkovisionLiveCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except OkovisionApiError as err:
             raise UpdateFailed(f"Erreur API OkoVision (live): {err}") from err
 
-        silo    = raw.get("silo", {}) or {}
-        ashtray = raw.get("ashtray", {}) or {}
+        silo        = raw.get("silo", {}) or {}
+        ashtray     = raw.get("ashtray", {}) or {}
+        maintenance = raw.get("maintenance", {}) or {}
 
         return {
             # Silo
@@ -63,6 +64,10 @@ class OkovisionLiveCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "ashtray_needs_emptying": ashtray.get("needs_emptying"),
             "ashtray_last_empty":     _parse_date(ashtray.get("last_empty_date")),
             "ashtray_error":          ashtray.get("error"),
+
+            # Maintenance
+            "last_sweep":       _parse_date(maintenance.get("last_sweep")),
+            "last_maintenance": _parse_date(maintenance.get("last_maintenance")),
         }
 
 

@@ -47,7 +47,6 @@ LIVE_SENSORS: tuple[OkovisionSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfMass.KILOGRAMS,
         icon="mdi:silo-outline",
-        entity_registry_enabled_default=False,
     ),
     OkovisionSensorDescription(
         key="silo_percent",
@@ -95,6 +94,20 @@ LIVE_SENSORS: tuple[OkovisionSensorDescription, ...] = (
         name="Cendrier – Dernier vidage",
         device_class=SensorDeviceClass.DATE,
         icon="mdi:calendar-arrow-left",
+    ),
+    OkovisionSensorDescription(
+        key="last_sweep",
+        data_key="last_sweep",
+        name="Dernier ramonage",
+        device_class=SensorDeviceClass.DATE,
+        icon="mdi:brush",
+    ),
+    OkovisionSensorDescription(
+        key="last_maintenance",
+        data_key="last_maintenance",
+        name="Dernière maintenance",
+        device_class=SensorDeviceClass.DATE,
+        icon="mdi:wrench-clock",
     ),
 )
 
@@ -221,10 +234,12 @@ class OkovisionLiveSensor(CoordinatorEntity[OkovisionLiveCoordinator], SensorEnt
 
     @property
     def native_value(self) -> Any:
-        error_key = "silo_error" if self.entity_description.data_key.startswith("silo_") else "ashtray_error"
-        if self.coordinator.data.get(error_key):
+        key = self.entity_description.data_key
+        if key.startswith("silo_") and self.coordinator.data.get("silo_error"):
             return None
-        return self.coordinator.data.get(self.entity_description.data_key)
+        if key.startswith("ashtray_") and self.coordinator.data.get("ashtray_error"):
+            return None
+        return self.coordinator.data.get(key)
 
 
 # ── Sensors daily ─────────────────────────────────────────────────────────────
