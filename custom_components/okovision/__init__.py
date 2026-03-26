@@ -55,7 +55,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         """Handler du service okovision.import_history."""
         years = call.data.get("years", 4)
         _LOGGER.info("OkoVision : lancement import_history (%d an(s))", years)
-        summary = await async_import_history(hass, client, years)
+        summary = await async_import_history(hass, client, entry.entry_id, years)
         if summary:
             _LOGGER.info(
                 "OkoVision import_history terminé : %s",

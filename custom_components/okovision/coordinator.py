@@ -125,6 +125,7 @@ class OkovisionDailyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return {
             "date":         _parse_date(raw.get("date")) or yesterday,
             "last_reset":   last_reset,
+            # Journalier
             "dju":          raw.get("dju"),
             "conso_kg":     raw.get("conso_kg"),
             "conso_ecs_kg": raw.get("conso_ecs_kg"),
@@ -132,6 +133,13 @@ class OkovisionDailyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "nb_cycle":     raw.get("nb_cycle"),
             "tc_ext_max":   raw.get("tc_ext_max"),
             "tc_ext_min":   raw.get("tc_ext_min"),
+            # Cumulatifs (depuis le début de l'historique)
+            "cumul_kg":     raw.get("cumul_kg"),
+            "cumul_kwh":    raw.get("cumul_kwh"),
+            "cumul_cycle":  raw.get("cumul_cycle"),
+            # Prix
+            "prix_kg":      raw.get("prix_kg"),
+            "prix_kwh":     raw.get("prix_kwh"),
         }
 
 

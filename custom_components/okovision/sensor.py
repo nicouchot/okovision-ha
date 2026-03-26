@@ -171,6 +171,49 @@ DAILY_SENSORS: tuple[OkovisionSensorDescription, ...] = (
         native_unit_of_measurement="DJU",
         icon="mdi:weather-snowflake-alert",
     ),
+    # ── Cumulatifs (depuis le début de l'historique) ──────────────────────────
+    OkovisionSensorDescription(
+        key="cumul_kg",
+        data_key="cumul_kg",
+        name="Consommation cumulée pellets",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfMass.KILOGRAMS,
+        icon="mdi:fire",
+    ),
+    OkovisionSensorDescription(
+        key="cumul_kwh",
+        data_key="cumul_kwh",
+        name="Énergie cumulée",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        icon="mdi:lightning-bolt",
+    ),
+    OkovisionSensorDescription(
+        key="cumul_cycle",
+        data_key="cumul_cycle",
+        name="Cycles cumulés",
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement="cycles",
+        icon="mdi:restart",
+    ),
+    # ── Prix ──────────────────────────────────────────────────────────────────
+    OkovisionSensorDescription(
+        key="prix_kg",
+        data_key="prix_kg",
+        name="Prix pellets (€/kg)",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR/kg",
+        icon="mdi:currency-eur",
+    ),
+    OkovisionSensorDescription(
+        key="prix_kwh",
+        data_key="prix_kwh",
+        name="Prix énergie (€/kWh)",
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement="EUR/kWh",
+        icon="mdi:currency-eur",
+    ),
 )
 
 
