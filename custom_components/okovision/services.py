@@ -109,6 +109,18 @@ STATISTICS_CONFIG: list[dict[str, Any]] = [
         "has_sum":    False,
         "has_mean":   True,
     },
+    {
+        # Coût cumulé calculé : ∑(conso_kwh × prix_kwh) par jour
+        # Permet d'afficher l'historique de coûts dans le tableau Énergie HA
+        # (configurer comme "entité de suivi des coûts totaux" sur la source kWh)
+        "entity_key": "cumul_cout_eur",
+        "api_key":    None,          # calculé, pas lu directement depuis l'API
+        "calc_keys":  ("conso_kwh", "prix_kwh"),
+        "name":       "Coût cumulé chauffage",
+        "unit":       "EUR",
+        "has_sum":    True,
+        "has_mean":   False,
+    },
 ]
 
 
@@ -208,7 +220,7 @@ async def async_import_history(
         today_str = today.isoformat()
         today_day: dict[str, Any] = {"date": today_str}
         # Récupère les cumuls live (champs directs dans la réponse action=today)
-        for api_key in ("cumul_kwh", "cumul_kg", "cumul_cycle", "prix_kwh"):
+        for api_key in ("cumul_kwh", "cumul_kg", "cumul_cycle", "prix_kwh", "conso_kwh"):
             val = today_raw.get(api_key)
             if val is not None:
                 today_day[api_key] = val
@@ -265,23 +277,43 @@ async def async_import_history(
             continue
 
         statistics: list[Any] = []
+        calc_keys  = cfg.get("calc_keys")   # (clé_a, clé_b) pour les champs calculés
+        running_sum = 0.0                   # utilisé uniquement pour cumul_cout_eur
 
         for day in sorted_days:
-            raw = day.get(api_key)
-            if raw is None:
-                continue
             try:
-                value    = float(raw)
                 day_date = date.fromisoformat(str(day["date"]))
                 start    = datetime.combine(day_date, time.min).replace(tzinfo=tz)
             except (ValueError, TypeError, KeyError):
                 continue
 
-            if has_sum:
-                # cumul_* est déjà le total cumulatif exact → sum = state = value
-                statistics.append(StatisticData(start=start, state=value, sum=value))
+            if calc_keys:
+                # Champ calculé : valeur = produit des deux clés (ex: conso_kwh × prix_kwh)
+                a = day.get(calc_keys[0])
+                b = day.get(calc_keys[1])
+                if a is None or b is None:
+                    continue
+                try:
+                    day_value = round(float(a) * float(b), 4)
+                except (ValueError, TypeError):
+                    continue
+                running_sum += day_value
+                statistics.append(StatisticData(
+                    start=start, state=day_value, sum=round(running_sum, 4)
+                ))
             else:
-                statistics.append(StatisticData(start=start, mean=value))
+                raw = day.get(api_key)
+                if raw is None:
+                    continue
+                try:
+                    value = float(raw)
+                except (ValueError, TypeError):
+                    continue
+                if has_sum:
+                    # cumul_* natif : sum = state = valeur cumulée exacte de l'API
+                    statistics.append(StatisticData(start=start, state=value, sum=value))
+                else:
+                    statistics.append(StatisticData(start=start, mean=value))
 
         if not statistics:
             _LOGGER.warning(

@@ -197,6 +197,16 @@ DAILY_SENSORS: tuple[OkovisionSensorDescription, ...] = (
         native_unit_of_measurement="cycles",
         icon="mdi:restart",
     ),
+    # ── Coût cumulé (pour le tableau Énergie HA) ──────────────────────────────
+    OkovisionSensorDescription(
+        key="cumul_cout_eur",
+        data_key="cumul_cout_eur",
+        name="Coût cumulé chauffage",
+        device_class=SensorDeviceClass.MONETARY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        native_unit_of_measurement="EUR",
+        icon="mdi:currency-eur",
+    ),
     # ── Prix ──────────────────────────────────────────────────────────────────
     OkovisionSensorDescription(
         key="prix_kg",
