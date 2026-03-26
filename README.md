@@ -1,51 +1,10 @@
 # OkoVision – Home Assistant Integration
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+![version](https://img.shields.io/github/v/release/nicouchot/okovision-ha)
 
 Intégration Home Assistant pour le système de monitoring chaudière à pellets **OkoVision**.
-Se connecte à `ha_api.php` via polling REST.
-
----
-
-## Entités exposées
-
-### Capteurs live – Silo & Cendrier
-> Mis à jour toutes les N secondes (configurable)
-
-| Entité | Description | Unité |
-|--------|-------------|-------|
-| Silo – Pellets restants | Stock estimé | kg |
-| Silo – Niveau | % de remplissage | % |
-| Silo – Capacité totale | Capacité max du silo | kg |
-| Silo – Dernier remplissage | Date du dernier remplissage | date |
-| Cendrier – Capacité restante | Avant saturation | kg |
-| Cendrier – Niveau de remplissage | % de remplissage | % |
-| Cendrier – Capacité totale | Capacité max du cendrier | kg |
-| Cendrier – Dernier vidage | Date du dernier vidage | date |
-| Dernier ramonage | Date du dernier ramonage (SWEEP) | date |
-| Dernière maintenance | Date de la dernière maintenance (MAINT) | date |
-
-### Capteurs journaliers J-1 – Données confirmées
-> Mis à jour toutes les 30 min – données disponibles après ~5h du matin pour la veille
-
-| Entité | Description | Unité |
-|--------|-------------|-------|
-| Température extérieure max (J-1) | Temp. max de la veille | °C |
-| Température extérieure min (J-1) | Temp. min de la veille | °C |
-| Consommation pellets (J-1) | Pellets brûlés (chauffage) | kg |
-| Consommation pellets ECS (J-1) | Pellets brûlés (eau chaude) | kg |
-| Énergie produite (J-1) | kWh calculés (kg × PCI × rendement) | kWh |
-| Cycles chaudière (J-1) | Nombre d'allumages | cycles |
-| DJU (J-1) | Degrés-Jours Unifiés | DJU |
-
-> Les capteurs journaliers utilisent `last_reset = minuit de J-1` afin que le
-> **tableau de bord Énergie** de HA attribue les valeurs au bon jour.
-
-### Capteur binaire
-
-| Entité | Description | Classe |
-|--------|-------------|--------|
-| Cendrier – À vider | `true` quand le cendrier est plein | `problem` |
+Se connecte à `ha_api.php` via polling REST local.
 
 ---
 
@@ -67,10 +26,157 @@ Se connecte à `ha_api.php` via polling REST.
 
 ---
 
+## Entités exposées
+
+### 🟢 Capteurs live – Silo & Cendrier
+> Mis à jour à chaque cycle de polling (intervalle configurable, min 30 s).
+> Source : `action=today`
+
+| Entité | Description | Unité | Type |
+|--------|-------------|-------|------|
+| Silo – Pellets restants | Stock estimé depuis le dernier remplissage | kg | Mesure |
+| Silo – Capacité totale | Capacité maximale configurée du silo | kg | Mesure |
+| Silo – Niveau | Taux de remplissage en pourcentage | % | Mesure |
+| Silo – Dernier remplissage | Date de la dernière livraison de pellets | — | Date |
+| Cendrier – Capacité restante | Volume disponible avant saturation | kg | Mesure |
+| Cendrier – Capacité totale | Capacité maximale configurée du cendrier | kg | Mesure |
+| Cendrier – Niveau de remplissage | Taux de remplissage en pourcentage | % | Mesure |
+| Cendrier – Dernier vidage | Date du dernier vidage des cendres | — | Date |
+| Dernier ramonage | Date du dernier ramonage (événement SWEEP) | — | Date |
+| Dernière maintenance | Date de la dernière maintenance (événement MAINT) | — | Date |
+
+### 🔴 Capteur binaire
+| Entité | Description | État |
+|--------|-------------|------|
+| Cendrier – À vider | Alerte quand la capacité restante est ≤ 0 | `problem` |
+
+---
+
+### 📅 Capteurs journaliers J-1 – Données confirmées
+> Mis à jour toutes les 30 min. Les données de la veille sont calculées et archivées
+> par OkoVision vers **5h du matin**. Le coordinator conserve le cache si les données
+> ne sont pas encore disponibles.
+> Source : `action=daily&date=hier`
+
+#### Consommation journalière
+
+| Entité | Description | Unité | State class |
+|--------|-------------|-------|-------------|
+| Consommation pellets (J-1) | Pellets brûlés pour le chauffage | kg | `total` |
+| Consommation pellets ECS (J-1) | Pellets brûlés pour l'eau chaude sanitaire | kg | `total` |
+| Énergie produite (J-1) | Énergie calculée : kg × PCI × rendement | kWh | `total` |
+| Cycles chaudière (J-1) | Nombre d'allumages dans la journée | cycles | `total` |
+| DJU (J-1) | Degrés-Jours Unifiés de la veille | DJU | Mesure |
+
+#### Températures
+
+| Entité | Description | Unité | State class |
+|--------|-------------|-------|-------------|
+| Température extérieure max (J-1) | Température maximale relevée la veille | °C | Mesure |
+| Température extérieure min (J-1) | Température minimale relevée la veille | °C | Mesure |
+
+#### Cumulatifs (depuis le premier enregistrement)
+
+| Entité | Description | Unité | State class |
+|--------|-------------|-------|-------------|
+| Consommation cumulée pellets | Total pellets brûlés depuis l'origine | kg | `total_increasing` |
+| Énergie cumulée | Total kWh produits depuis l'origine | kWh | `total_increasing` |
+| Cycles cumulés | Total allumages depuis l'origine | cycles | `total_increasing` |
+| Coût cumulé chauffage | Coût total calculé : ∑(kWh/j × €/kWh/j) | EUR | `total_increasing` |
+
+#### Prix
+
+| Entité | Description | Unité | State class |
+|--------|-------------|-------|-------------|
+| Prix pellets (€/kg) | Prix au kg issu de la dernière livraison (FIFO) | EUR/kg | Mesure |
+| Prix énergie (€/kWh) | Prix par kWh calculé depuis le prix pellets | EUR/kWh | Mesure |
+
+> Les capteurs `total` utilisent `last_reset = minuit de J-1` pour que le
+> **tableau de bord Énergie** attribue les valeurs au bon jour.
+
+---
+
+## 📊 Import de l'historique (`okovision.import_history`)
+
+L'intégration propose un service permettant de **remplir rétroactivement** les statistiques
+Home Assistant avec jusqu'à 4 ans de données OkoVision.
+
+### Pourquoi ce service ?
+
+Par défaut, HA ne connaît que les données depuis l'installation de l'intégration.
+Ce service injecte l'historique complet dans le **recorder** de HA, ce qui permet de :
+- Visualiser des courbes de consommation sur plusieurs années
+- Alimenter le tableau de bord **Énergie** avec les données historiques
+- Calculer des bilans annuels / saisonniers
+
+### Capteurs alimentés par l'import
+
+| Capteur | Contenu importé | Méthode |
+|---------|----------------|---------|
+| Énergie cumulée | Cumul kWh depuis l'origine | Valeur `cumul_kwh` de l'API |
+| Consommation cumulée pellets | Cumul kg depuis l'origine | Valeur `cumul_kg` de l'API |
+| Cycles cumulés | Cumul allumages depuis l'origine | Valeur `cumul_cycle` de l'API |
+| Coût cumulé chauffage | Coût total calculé | ∑(conso_kwh/j × prix_kwh/j) |
+| Prix énergie (€/kWh) | Évolution historique du prix | Valeur `prix_kwh` de l'API |
+
+### Comment lancer l'import
+
+1. **Outils de développement** (`</>` dans la barre latérale) → onglet **Actions**
+2. Rechercher `okovision.import_history`
+3. Paramétrer et exécuter :
+
+```yaml
+years: 4   # nombre d'années à importer (1 à 4, défaut : 4)
+```
+
+### Fonctionnement interne
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Pour chaque mois sur la période (max 48 requêtes)           │
+│    → action=monthly&month=MM&year=YYYY                       │
+│    → collecte des valeurs journalières (cumul_*, prix_*)     │
+│                                                              │
+│  + action=today → données du jour en cours                   │
+│    (écrase l'entrée incorrecte du recorder pour aujourd'hui) │
+│                                                              │
+│  → Injection via recorder.import_statistics                  │
+│     source="recorder", statistic_id = entity_id HA          │
+│     sum = valeur cumulée exacte de l'API                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Durée estimée** : 2 à 5 minutes pour 4 ans (48 requêtes HTTP avec délai anti-saturation).
+
+**Idempotent** : relancer le service ne crée pas de doublons — HA fusionne les
+statistiques existantes.
+
+**Suivi de la progression** : **Paramètres → Système → Journaux** → filtrer `okovision`
+
+```
+OkoVision import_history : démarrage 2022-03-01 → 2026-03-26 (4 an(s))
+OkoVision import_history : 01/2022 ✓ (1/48 – 31 jours cumulés)
+...
+OkoVision import_history : ✓ cumul_kwh       → 1461 pts | dernier=18432.50 kWh
+OkoVision import_history : ✓ cumul_kg        →  1461 pts | dernier=3521.20 kg
+OkoVision import_history : ✓ cumul_cycle     →  1461 pts | dernier=12840 cycles
+OkoVision import_history : ✓ cumul_cout_eur  →  1461 pts | dernier=4218.60 EUR
+OkoVision import_history : terminé – 5/5 métriques injectées
+```
+
+### Configuration du tableau Énergie après import
+
+Dans **Paramètres → Énergie**, sur la source **Énergie cumulée** :
+- **Suivre les coûts** → *Utiliser une entité de suivi des coûts totaux*
+- Sélectionner : **Coût cumulé chauffage** (EUR)
+
+---
+
 ## API utilisée
 
 | Action | Utilisation | Fréquence |
 |--------|-------------|-----------|
-| `action=today` | Silo + cendrier live | Toutes les N secondes |
-| `action=daily&date=hier` | Résumé J-1 confirmé | Toutes les 30 min |
+| `action=today` | Silo + cendrier live + données du jour | Toutes les N secondes |
+| `action=daily&date=YYYY-MM-DD` | Résumé J-1 confirmé | Toutes les 30 min |
+| `action=monthly&month=MM&year=YYYY` | Données mensuelles (import historique) | 1× par mois lors de l'import |
 | `action=status` | Test de connexion au setup | 1× au démarrage |
