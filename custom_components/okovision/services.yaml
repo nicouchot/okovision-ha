@@ -1,0 +1,20 @@
+import_history:
+  name: Importer l'historique
+  description: >
+    Importe les statistiques historiques OkoVision (consommation pellets, énergie,
+    cycles, températures, DJU) dans le recorder Home Assistant.
+    Ces statistiques sont disponibles dans le tableau de bord Énergie et dans
+    l'historique HA sous l'identifiant okovision:<métrique>.
+    À lancer une seule fois après l'installation de l'intégration.
+  fields:
+    years:
+      name: Nombre d'années
+      description: Nombre d'années d'historique à importer (1 à 4 ans, défaut 4).
+      required: false
+      default: 4
+      selector:
+        number:
+          min: 1
+          max: 4
+          step: 1
+          mode: slider
