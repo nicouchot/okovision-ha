@@ -87,10 +87,9 @@ EXTERNAL_STATS_CONFIG: list[dict[str, Any]] = [
         "has_mean":   False,
     },
     {
-        # Coût cumulé calculé : ∑(conso_kwh × prix_kwh) par jour
+        # Coût cumulé – valeur directe depuis l'API (champ cumul_cout)
         "entity_key": "cumul_cout_eur",
-        "api_key":    None,
-        "calc_keys":  ("conso_kwh", "prix_kwh"),
+        "api_key":    "cumul_cout",
         "name":       "OkoVision – Coût cumulé chauffage",
         "unit":       "EUR",
         "has_sum":    True,
@@ -120,8 +119,7 @@ RECORDER_CUMUL_CONFIG: list[dict[str, Any]] = [
     {"key": "cumul_kwh",      "api_key": "cumul_kwh",   "unit": UnitOfEnergy.KILO_WATT_HOUR, "calc": False},
     {"key": "cumul_kg",       "api_key": "cumul_kg",    "unit": UnitOfMass.KILOGRAMS,         "calc": False},
     {"key": "cumul_cycle",    "api_key": "cumul_cycle", "unit": "cycles",                     "calc": False},
-    {"key": "cumul_cout_eur", "api_key": None,           "unit": "EUR",                        "calc": True,
-     "calc_keys": ("conso_kwh", "prix_kwh")},
+    {"key": "cumul_cout_eur", "api_key": "cumul_cout",    "unit": "EUR",                        "calc": False},
 ]
 
 # ── D) Statistiques RECORDER – températures (interpolation douce) ─────────────
@@ -151,13 +149,10 @@ async def async_push_daily_stats(
 
     for cfg in EXTERNAL_STATS_CONFIG:
         entity_key = cfg["entity_key"]
-        calc_keys  = cfg.get("calc_keys")
 
         try:
-            if calc_keys:
-                raw = daily_data.get("cumul_cout_eur")
-            else:
-                raw = daily_data.get(cfg["api_key"])
+            # Le coordinator stocke les valeurs sous entity_key (ex: "cumul_cout_eur")
+            raw = daily_data.get(entity_key)
 
             if raw is None:
                 continue
@@ -264,7 +259,6 @@ async def async_import_history(
     for cfg in EXTERNAL_STATS_CONFIG:
         entity_key   = cfg["entity_key"]
         api_key      = cfg["api_key"]
-        calc_keys    = cfg.get("calc_keys")
         statistic_id = f"{DOMAIN}:{entity_key}"
 
         metadata = _make_metadata(
@@ -277,7 +271,6 @@ async def async_import_history(
         )
 
         statistics: list[Any] = []
-        running_sum = 0.0
 
         for day in sorted_days:
             try:
@@ -286,26 +279,14 @@ async def async_import_history(
             except (ValueError, TypeError, KeyError):
                 continue
 
-            if calc_keys:
-                a = day.get(calc_keys[0])
-                b = day.get(calc_keys[1])
-                if a is None or b is None:
-                    continue
-                try:
-                    day_value   = round(float(a) * float(b), 4)
-                except (ValueError, TypeError):
-                    continue
-                running_sum += day_value
-                statistics.append(StatisticData(start=start, state=day_value, sum=round(running_sum, 4)))
-            else:
-                raw = day.get(api_key)
-                if raw is None:
-                    continue
-                try:
-                    value = float(raw)
-                except (ValueError, TypeError):
-                    continue
-                statistics.append(StatisticData(start=start, state=value, sum=value))
+            raw = day.get(api_key)
+            if raw is None:
+                continue
+            try:
+                value = float(raw)
+            except (ValueError, TypeError):
+                continue
+            statistics.append(StatisticData(start=start, state=value, sum=value))
 
         if statistics:
             try:
@@ -387,19 +368,6 @@ async def async_import_history(
                 _LOGGER.error("OkoVision import ✗ [rec] '%s' → %s", key, err)
 
     # ── 5. Sensors cumulatifs – courbe progressive (mean par jour) ─────────────
-    # Pré-calcule le cumul_cout_eur pour toute la période
-    running_cout = 0.0
-    cout_by_date: dict[str, float] = {}
-    for day in sorted_days:
-        a = day.get("conso_kwh")
-        b = day.get("prix_kwh")
-        if a is not None and b is not None:
-            try:
-                running_cout += float(a) * float(b)
-                cout_by_date[str(day["date"])] = round(running_cout, 4)
-            except (ValueError, TypeError):
-                pass
-
     for cfg in RECORDER_CUMUL_CONFIG:
         key       = cfg["key"]
         entity_id = entity_map.get(key)
@@ -420,11 +388,8 @@ async def async_import_history(
             except (ValueError, TypeError, KeyError):
                 continue
 
-            if cfg["calc"]:
-                value = cout_by_date.get(str(day["date"]))
-            else:
-                raw   = day.get(cfg["api_key"])
-                value = float(raw) if raw is not None else None
+            raw   = day.get(cfg["api_key"])
+            value = float(raw) if raw is not None else None
 
             if value is None:
                 continue

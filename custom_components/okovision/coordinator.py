@@ -174,10 +174,10 @@ class OkovisionDailyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Prix
             "prix_kg":      raw.get("prix_kg"),
             "prix_kwh":     raw.get("prix_kwh"),
-            # Coût cumulé (approximation : cumul_kwh × prix_kwh du jour)
+            # Coût cumulé – valeur directe depuis l'API (champ cumul_cout)
             "cumul_cout_eur": (
-                round(float(raw["cumul_kwh"]) * float(raw["prix_kwh"]), 2)
-                if raw.get("cumul_kwh") and raw.get("prix_kwh")
+                round(float(raw["cumul_cout"]), 2)
+                if raw.get("cumul_cout") is not None
                 else None
             ),
         }
