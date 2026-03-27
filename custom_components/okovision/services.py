@@ -482,36 +482,15 @@ async def async_reset_history(
 
     all_ids = [*ext_ids, *entity_ids]
 
-    from homeassistant.components.recorder import get_instance  # noqa: PLC0415
-    from homeassistant.components.recorder import statistics as rec_stats  # noqa: PLC0415
-
-    instance = get_instance(hass)
-
-    def _do_clear() -> None:
-        """Supprime les statistiques – tente plusieurs signatures selon la version HA."""
-        fn = getattr(rec_stats, "clear_statistics", None)
-        if fn is None:
-            available = [a for a in dir(rec_stats) if not a.startswith("_")]
-            raise RuntimeError(
-                "La fonction 'clear_statistics' est introuvable dans "
-                "homeassistant.components.recorder.statistics. "
-                f"Symboles disponibles : {available}"
-            )
-        # HA ≤ 2025 : clear_statistics(instance, statistic_ids)
-        # HA 2026.x : clear_statistics(statistic_ids)  (instance retiré)
-        errors: list[str] = []
-        for args in [(all_ids,), (instance, all_ids)]:
-            try:
-                fn(*args)
-                return
-            except TypeError as exc:
-                errors.append(f"{args!r} → TypeError: {exc}")
-        raise RuntimeError(
-            f"clear_statistics : aucune signature compatible. Tentatives : {errors}"
-        )
-
     try:
-        await instance.async_add_executor_job(_do_clear)
+        # Utilise le service recorder.clear_statistics qui gère lui-même
+        # le thread du recorder (évite "unsafe call not in recorder thread")
+        await hass.services.async_call(
+            "recorder",
+            "clear_statistics",
+            {"statistic_ids": all_ids},
+            blocking=True,
+        )
     except Exception as err:  # noqa: BLE001
         _LOGGER.error(
             "OkoVision reset_history : échec suppression statistiques – %s: %s",
