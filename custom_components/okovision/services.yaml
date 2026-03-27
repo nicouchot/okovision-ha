@@ -1,3 +1,11 @@
+reset_history:
+  name: Réinitialiser l'historique
+  description: >
+    Supprime toutes les statistiques OkoVision du recorder Home Assistant
+    (statistiques externes okovision:* et historique des entités).
+    N'efface pas les états actuels des entités.
+    À utiliser avant un ré-import complet ou pour repartir de zéro.
+
 import_history:
   name: Importer l'historique
   description: >

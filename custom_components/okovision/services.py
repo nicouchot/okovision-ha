@@ -491,17 +491,24 @@ async def async_reset_history(
         """Supprime les statistiques – tente plusieurs signatures selon la version HA."""
         fn = getattr(rec_stats, "clear_statistics", None)
         if fn is None:
+            available = [a for a in dir(rec_stats) if not a.startswith("_")]
             raise RuntimeError(
                 "La fonction 'clear_statistics' est introuvable dans "
-                "homeassistant.components.recorder.statistics – "
-                "vérifiez la version HA."
+                "homeassistant.components.recorder.statistics. "
+                f"Symboles disponibles : {available}"
             )
         # HA ≤ 2025 : clear_statistics(instance, statistic_ids)
-        # HA ≥ 2026 : clear_statistics(statistic_ids)  (instance retiré)
-        try:
-            fn(instance, all_ids)
-        except TypeError:
-            fn(all_ids)
+        # HA 2026.x : clear_statistics(statistic_ids)  (instance retiré)
+        errors: list[str] = []
+        for args in [(all_ids,), (instance, all_ids)]:
+            try:
+                fn(*args)
+                return
+            except TypeError as exc:
+                errors.append(f"{args!r} → TypeError: {exc}")
+        raise RuntimeError(
+            f"clear_statistics : aucune signature compatible. Tentatives : {errors}"
+        )
 
     try:
         await instance.async_add_executor_job(_do_clear)
@@ -509,6 +516,7 @@ async def async_reset_history(
         _LOGGER.error(
             "OkoVision reset_history : échec suppression statistiques – %s: %s",
             type(err).__name__, err,
+            exc_info=True,
         )
         raise
 
