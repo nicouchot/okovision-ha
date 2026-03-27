@@ -486,7 +486,31 @@ async def async_reset_history(
     from homeassistant.components.recorder import statistics as rec_stats  # noqa: PLC0415
 
     instance = get_instance(hass)
-    await instance.async_add_executor_job(rec_stats.clear_statistics, instance, all_ids)
+
+    def _do_clear() -> None:
+        """Supprime les statistiques – tente plusieurs signatures selon la version HA."""
+        fn = getattr(rec_stats, "clear_statistics", None)
+        if fn is None:
+            raise RuntimeError(
+                "La fonction 'clear_statistics' est introuvable dans "
+                "homeassistant.components.recorder.statistics – "
+                "vérifiez la version HA."
+            )
+        # HA ≤ 2025 : clear_statistics(instance, statistic_ids)
+        # HA ≥ 2026 : clear_statistics(statistic_ids)  (instance retiré)
+        try:
+            fn(instance, all_ids)
+        except TypeError:
+            fn(all_ids)
+
+    try:
+        await instance.async_add_executor_job(_do_clear)
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.error(
+            "OkoVision reset_history : échec suppression statistiques – %s: %s",
+            type(err).__name__, err,
+        )
+        raise
 
     _LOGGER.info(
         "OkoVision reset_history : %d séries supprimées (%d ext + %d entities)",

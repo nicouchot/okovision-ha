@@ -67,8 +67,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # ── Service reset_history ─────────────────────────────────────────────────
     async def handle_reset_history(call: ServiceCall) -> None:
         _LOGGER.warning("OkoVision : lancement reset_history – suppression de tout l'historique")
-        count = await async_reset_history(hass, entry.entry_id)
-        _LOGGER.info("OkoVision reset_history terminé : %d séries supprimées", count)
+        try:
+            count = await async_reset_history(hass, entry.entry_id)
+            _LOGGER.info("OkoVision reset_history terminé : %d séries supprimées", count)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.error("OkoVision reset_history échoué : %s: %s", type(err).__name__, err)
+            raise
 
     # Enregistrement une seule fois (si pas déjà fait par une autre entry)
     if not hass.services.has_service(DOMAIN, SERVICE_IMPORT_HISTORY):
