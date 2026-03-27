@@ -175,7 +175,7 @@ DAILY_SENSORS: tuple[OkovisionSensorDescription, ...] = (
     OkovisionSensorDescription(
         key="cumul_kg",
         data_key="cumul_kg",
-        name="Consommation cumulée pellets",
+        name="Cumul – Consommation pellets",
         # MEASUREMENT (pas TOTAL_INCREASING) pour éviter le conflit avec le recorder
         # quand les statistiques externes okovision:cumul_kg sont actives.
         state_class=SensorStateClass.MEASUREMENT,
@@ -185,7 +185,7 @@ DAILY_SENSORS: tuple[OkovisionSensorDescription, ...] = (
     OkovisionSensorDescription(
         key="cumul_kwh",
         data_key="cumul_kwh",
-        name="Énergie cumulée",
+        name="Cumul – Énergie",
         device_class=SensorDeviceClass.ENERGY,
         # MEASUREMENT : la courbe historique passe par okovision:cumul_kwh (stat externe)
         state_class=SensorStateClass.MEASUREMENT,
@@ -195,7 +195,7 @@ DAILY_SENSORS: tuple[OkovisionSensorDescription, ...] = (
     OkovisionSensorDescription(
         key="cumul_cycle",
         data_key="cumul_cycle",
-        name="Cycles cumulés",
+        name="Cumul – Cycles",
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="cycles",
         icon="mdi:restart",
@@ -204,7 +204,7 @@ DAILY_SENSORS: tuple[OkovisionSensorDescription, ...] = (
     OkovisionSensorDescription(
         key="cumul_cout_eur",
         data_key="cumul_cout_eur",
-        name="Coût cumulé chauffage",
+        name="Cumul – Coût chauffage",
         device_class=SensorDeviceClass.MONETARY,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="EUR",
