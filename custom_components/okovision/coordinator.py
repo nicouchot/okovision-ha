@@ -130,7 +130,7 @@ class OkovisionDailyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         super().__init__(
             hass, _LOGGER,
             name=f"{DOMAIN}_daily",
-            update_interval=timedelta(minutes=30),
+            update_interval=timedelta(hours=1),
         )
         self.client = client
         self._last_fetched_date: date | None = None
