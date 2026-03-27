@@ -14,6 +14,24 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+# Clés dont la valeur None est acceptable (non-numériques)
+_NULLABLE_KEYS = {"date", "last_reset", "silo_error", "ashtray_error"}
+
+
+def _merge_with_previous(new: dict[str, Any], previous: dict[str, Any] | None) -> dict[str, Any]:
+    """Remplace les valeurs None dans `new` par les dernières valeurs connues de `previous`.
+
+    Cela garantit la continuité des sensors dans HA même quand l'API renvoie
+    null entre minuit et ~5h (données J-1 pas encore disponibles).
+    Les clés non-numériques (date, last_reset, erreurs) ne sont pas préservées.
+    """
+    if not previous:
+        return new
+    return {
+        k: (v if v is not None or k in _NULLABLE_KEYS else previous.get(k))
+        for k, v in new.items()
+    }
+
 
 class OkovisionLiveCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Interroge action=today toutes les N secondes.
@@ -43,13 +61,16 @@ class OkovisionLiveCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             raw = await self.client.async_get_today()
         except OkovisionApiError as err:
+            if self.data:
+                _LOGGER.debug("OkoVision live: erreur API, conservation du cache (%s)", err)
+                return self.data
             raise UpdateFailed(f"Erreur API OkoVision (live): {err}") from err
 
         silo        = raw.get("silo", {}) or {}
         ashtray     = raw.get("ashtray", {}) or {}
         maintenance = raw.get("maintenance", {}) or {}
 
-        return {
+        result = {
             # Silo
             "silo_remains_kg":  silo.get("remains_kg"),
             "silo_capacity_kg": silo.get("capacity_kg"),
@@ -70,6 +91,9 @@ class OkovisionLiveCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "last_maintenance": _parse_date(maintenance.get("last_maintenance")),
         }
 
+        # Préserve les valeurs précédentes si l'API renvoie null
+        return _merge_with_previous(result, self.data)
+
 
 class OkovisionDailyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Récupère le résumé confirmé de J-1 (action=daily&date=hier).
@@ -77,6 +101,10 @@ class OkovisionDailyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     Rafraîchi toutes les 30 minutes – les données sont stables une fois
     disponibles (vers 5h du matin). Le coordinator mémorise la dernière
     date fetched pour éviter des requêtes inutiles.
+
+    Après chaque fetch réussi de nouvelles données J-1, pousse automatiquement
+    une entrée dans les statistiques externes (okovision:cumul_kwh, etc.) pour
+    que le tableau Énergie soit à jour sans avoir à relancer import_history.
 
     Données retournées :
     {
@@ -89,6 +117,12 @@ class OkovisionDailyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         "nb_cycle":     int   | None,
         "tc_ext_max":   float | None,
         "tc_ext_min":   float | None,
+        "cumul_kg":     float | None,
+        "cumul_kwh":    float | None,
+        "cumul_cycle":  float | None,
+        "prix_kg":      float | None,
+        "prix_kwh":     float | None,
+        "cumul_cout_eur": float | None,
     }
     """
 
@@ -122,7 +156,7 @@ class OkovisionDailyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         self._last_fetched_date = date.today()
 
-        return {
+        result = {
             "date":         _parse_date(raw.get("date")) or yesterday,
             "last_reset":   last_reset,
             # Journalier
@@ -140,14 +174,27 @@ class OkovisionDailyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Prix
             "prix_kg":      raw.get("prix_kg"),
             "prix_kwh":     raw.get("prix_kwh"),
-            # Coût cumulé (approximation live : cumul_kwh × prix_kwh du jour)
-            # La valeur exacte est calculée jour par jour lors de l'import historique.
+            # Coût cumulé (approximation : cumul_kwh × prix_kwh du jour)
             "cumul_cout_eur": (
                 round(float(raw["cumul_kwh"]) * float(raw["prix_kwh"]), 2)
                 if raw.get("cumul_kwh") and raw.get("prix_kwh")
                 else None
             ),
         }
+
+        # Préserve les valeurs précédentes si l'API renvoie null sur certains champs
+        result = _merge_with_previous(result, self.data)
+
+        # ── Push automatique des statistiques externes pour J-1 ───────────────
+        # Maintient okovision:cumul_kwh / cumul_cout_eur à jour dans le tableau
+        # Énergie sans nécessiter de relancer le service import_history.
+        try:
+            from .services import async_push_daily_stats  # import local pour éviter le cycle
+            await async_push_daily_stats(self.hass, result)
+        except Exception as push_err:  # noqa: BLE001
+            _LOGGER.debug("OkoVision daily: push stats externes ignoré (%s)", push_err)
+
+        return result
 
 
 def _parse_date(value: str | None) -> date | None:
