@@ -34,7 +34,6 @@ try:
         StatisticMeanType,
         StatisticMetaData,
         async_add_external_statistics,
-        async_clear_statistics,
         async_import_statistics,
     )
 
@@ -58,7 +57,6 @@ except ImportError:
     )
     from homeassistant.components.recorder.statistics import (  # type: ignore[no-redef]
         async_add_external_statistics,
-        async_clear_statistics,
         async_import_statistics,
     )
 
@@ -519,12 +517,11 @@ async def async_reset_history(
 
     all_ids = [*ext_ids, *entity_ids]
 
-    try:
-        async_clear_statistics(hass, all_ids)
-    except TypeError:
-        # Certaines versions HA attendent l'instance recorder en premier argument
-        from homeassistant.components.recorder import get_instance  # noqa: PLC0415
-        async_clear_statistics(get_instance(hass), all_ids)
+    from homeassistant.components.recorder import get_instance  # noqa: PLC0415
+    from homeassistant.components.recorder import statistics as rec_stats  # noqa: PLC0415
+
+    instance = get_instance(hass)
+    await instance.async_add_executor_job(rec_stats.clear_statistics, instance, all_ids)
 
     _LOGGER.info(
         "OkoVision reset_history : %d séries supprimées (%d ext + %d entities)",
