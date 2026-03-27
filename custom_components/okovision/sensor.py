@@ -115,7 +115,7 @@ DAILY_SENSORS: tuple[OkovisionSensorDescription, ...] = (
     OkovisionSensorDescription(
         key="tc_ext_max",
         data_key="tc_ext_max",
-        name="Température extérieure max (J-1)",
+        name="Hier – Température extérieure max",
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
@@ -124,7 +124,7 @@ DAILY_SENSORS: tuple[OkovisionSensorDescription, ...] = (
     OkovisionSensorDescription(
         key="tc_ext_min",
         data_key="tc_ext_min",
-        name="Température extérieure min (J-1)",
+        name="Hier – Température extérieure min",
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
@@ -133,7 +133,7 @@ DAILY_SENSORS: tuple[OkovisionSensorDescription, ...] = (
     OkovisionSensorDescription(
         key="conso_kg",
         data_key="conso_kg",
-        name="Consommation pellets (J-1)",
+        name="Hier – Consommation pellets",
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=UnitOfMass.KILOGRAMS,
         icon="mdi:fire",
@@ -141,7 +141,7 @@ DAILY_SENSORS: tuple[OkovisionSensorDescription, ...] = (
     OkovisionSensorDescription(
         key="conso_ecs_kg",
         data_key="conso_ecs_kg",
-        name="Consommation pellets ECS (J-1)",
+        name="Hier – Consommation pellets ECS",
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=UnitOfMass.KILOGRAMS,
         icon="mdi:water-boiler",
@@ -149,7 +149,7 @@ DAILY_SENSORS: tuple[OkovisionSensorDescription, ...] = (
     OkovisionSensorDescription(
         key="conso_kwh",
         data_key="conso_kwh",
-        name="Énergie produite (J-1)",
+        name="Hier – Énergie produite",
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
@@ -158,7 +158,7 @@ DAILY_SENSORS: tuple[OkovisionSensorDescription, ...] = (
     OkovisionSensorDescription(
         key="nb_cycle",
         data_key="nb_cycle",
-        name="Cycles chaudière (J-1)",
+        name="Hier – Cycles chaudière",
         state_class=SensorStateClass.TOTAL,
         native_unit_of_measurement="cycles",
         icon="mdi:restart",
@@ -166,7 +166,7 @@ DAILY_SENSORS: tuple[OkovisionSensorDescription, ...] = (
     OkovisionSensorDescription(
         key="dju",
         data_key="dju",
-        name="DJU (J-1)",
+        name="Hier – DJU",
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement="DJU",
         icon="mdi:weather-snowflake-alert",
