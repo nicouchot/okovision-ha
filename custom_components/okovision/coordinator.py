@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import OkovisionApiClient, OkovisionApiError
+from .api import OkovisionApiClient, OkovisionApiError, OkovisionDataNotFoundError
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,6 +60,9 @@ class OkovisionLiveCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         try:
             raw = await self.client.async_get_today()
+        except OkovisionDataNotFoundError as err:
+            _LOGGER.info("OkoVision live: données non disponibles, conservation du cache (%s)", err)
+            return self.data or {}
         except OkovisionApiError as err:
             if self.data:
                 _LOGGER.debug("OkoVision live: erreur API, conservation du cache (%s)", err)
@@ -147,10 +150,15 @@ class OkovisionDailyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         try:
             raw = await self.client.async_get_daily(yesterday.isoformat())
+        except OkovisionDataNotFoundError as err:
+            # Données pas encore importées par OkoVision (typiquement entre minuit et ~5h)
+            # On conserve le cache et on ne marque PAS _last_fetched_date pour retenter au prochain cycle
+            _LOGGER.info("OkoVision daily: données non encore disponibles pour J-1, nouvelle tentative au prochain cycle (%s)", err)
+            return self.data or {}
         except OkovisionApiError as err:
-            # Si les données ne sont pas encore dispo, conserver les précédentes
+            # Autre erreur API : conserver le cache si disponible
             if self.data:
-                _LOGGER.debug("OkoVision daily: données non disponibles, conservation du cache (%s)", err)
+                _LOGGER.debug("OkoVision daily: erreur API, conservation du cache (%s)", err)
                 return self.data
             raise UpdateFailed(f"Erreur API OkoVision (daily): {err}") from err
 

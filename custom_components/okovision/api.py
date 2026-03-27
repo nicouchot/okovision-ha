@@ -21,6 +21,10 @@ class OkovisionConnectionError(OkovisionApiError):
     """Connection / network error."""
 
 
+class OkovisionDataNotFoundError(OkovisionApiError):
+    """Données non encore disponibles pour la date demandée (404)."""
+
+
 class OkovisionApiClient:
     """Client pour l'API ha_api.php d'OkoVision.
 
@@ -58,6 +62,13 @@ class OkovisionApiClient:
             ) as response:
                 if response.status == 401:
                     raise OkovisionAuthError("Token invalide ou accès refusé")
+                if response.status == 404:
+                    try:
+                        body = await response.json(content_type=None)
+                        msg = body.get("error", "Données non disponibles") if isinstance(body, dict) else "Données non disponibles"
+                    except Exception:  # noqa: BLE001
+                        msg = "Données non disponibles (404)"
+                    raise OkovisionDataNotFoundError(msg)
                 response.raise_for_status()
                 data = await response.json(content_type=None)
                 if isinstance(data, dict) and "error" in data:
