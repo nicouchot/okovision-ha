@@ -238,7 +238,7 @@ async def async_import_history(
         today_raw = await client.async_get_today()
         today_str = today.isoformat()
         today_day: dict[str, Any] = {"date": today_str}
-        for k in ("cumul_kwh", "cumul_kg", "cumul_cycle", "prix_kwh",
+        for k in ("cumul_kwh", "cumul_kg", "cumul_cycle", "cumul_cout", "prix_kwh",
                   "conso_kwh", "conso_kg", "conso_ecs_kg", "nb_cycle",
                   "tc_ext_max", "tc_ext_min", "dju"):
             v = today_raw.get(k)
@@ -248,6 +248,21 @@ async def async_import_history(
             all_days[today_str] = today_day
     except OkovisionApiError as err:
         _LOGGER.warning("OkoVision import_history : données live non dispo (%s)", err)
+
+    # ── 1c. Reconstruction de cumul_cout pour les jours sans valeur API ────────
+    # action=monthly peut ne pas retourner cumul_cout par jour. On le recalcule
+    # comme somme progressive de conso_kwh × prix_kwh, en s'ancrant sur toute
+    # valeur réelle présente (fournie par action=daily ou action=today).
+    running_cout = 0.0
+    for day_str in sorted(all_days.keys()):
+        day = all_days[day_str]
+        if day.get("cumul_cout") is not None:
+            running_cout = float(day["cumul_cout"])          # ancre réelle
+        elif day.get("conso_kwh") is not None and day.get("prix_kwh") is not None:
+            running_cout = round(
+                running_cout + float(day["conso_kwh"]) * float(day["prix_kwh"]), 4
+            )
+            day["cumul_cout"] = running_cout
 
     sorted_days   = sorted(all_days.values(), key=lambda d: d["date"])
     days_by_date  = {d["date"]: d for d in sorted_days}

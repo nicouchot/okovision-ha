@@ -53,9 +53,9 @@ Se connecte à `ha_api.php` via polling REST local.
 ---
 
 ### 📅 Capteurs journaliers J-1 – Données confirmées
-> Mis à jour toutes les 30 min. Les données de la veille sont calculées et archivées
-> par OkoVision vers **5h du matin**. Le coordinator conserve le cache si les données
-> ne sont pas encore disponibles.
+> Mis à jour toutes les heures. L'API retourne `is_new: true` dès que les données
+> de la veille sont disponibles. Tant que `is_new: false`, le coordinator conserve
+> le cache et retente au prochain cycle (pas d'attente fixe).
 > Source : `action=daily&date=hier`
 
 #### Consommation journalière
@@ -93,6 +93,18 @@ Se connecte à `ha_api.php` via polling REST local.
 
 > Les capteurs `total` utilisent `last_reset = minuit de J-1` pour que le
 > **tableau de bord Énergie** attribue les valeurs au bon jour.
+
+---
+
+## 🗑️ Réinitialisation de l'historique (`okovision.reset_history`)
+
+Supprime toutes les statistiques OkoVision du recorder HA (statistiques externes
+`okovision:*` et historique des entités). N'efface pas les états actuels.
+
+À utiliser avant un ré-import complet ou pour repartir de zéro.
+
+1. **Outils de développement** → onglet **Actions**
+2. Rechercher `okovision.reset_history` et exécuter (aucun paramètre)
 
 ---
 
@@ -138,11 +150,13 @@ years: 4   # nombre d'années à importer (1 à 4, défaut : 4)
 │    → collecte des valeurs journalières (cumul_*, prix_*)     │
 │                                                              │
 │  + action=today → données du jour en cours                   │
-│    (écrase l'entrée incorrecte du recorder pour aujourd'hui) │
+│                                                              │
+│  Reconstruction de cumul_cout si absent du monthly :         │
+│    cumul_cout[j] = cumul_cout[j-1] + conso_kwh[j] × prix_kwh[j]│
+│    (ancrage sur toute valeur réelle disponible)              │
 │                                                              │
 │  → Injection via recorder.import_statistics                  │
 │     source="recorder", statistic_id = entity_id HA          │
-│     sum = valeur cumulée exacte de l'API                     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -177,6 +191,6 @@ Dans **Paramètres → Énergie**, sur la source **Énergie cumulée** :
 | Action | Utilisation | Fréquence |
 |--------|-------------|-----------|
 | `action=today` | Silo + cendrier live + données du jour | Toutes les N secondes |
-| `action=daily&date=YYYY-MM-DD` | Résumé J-1 confirmé | Toutes les 30 min |
+| `action=daily&date=YYYY-MM-DD` | Résumé J-1 confirmé (`is_new` indique si les données sont prêtes) | Toutes les heures |
 | `action=monthly&month=MM&year=YYYY` | Données mensuelles (import historique) | 1× par mois lors de l'import |
 | `action=status` | Test de connexion au setup | 1× au démarrage |
