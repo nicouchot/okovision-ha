@@ -151,9 +151,8 @@ class OkovisionDailyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             raw = await self.client.async_get_daily(yesterday.isoformat())
         except OkovisionDataNotFoundError as err:
-            # Données pas encore importées par OkoVision (typiquement entre minuit et ~5h)
-            # On conserve le cache et on ne marque PAS _last_fetched_date pour retenter au prochain cycle
-            _LOGGER.info("OkoVision daily: données non encore disponibles pour J-1, nouvelle tentative au prochain cycle (%s)", err)
+            # 404 : date incohérente ou données absentes – conserver le cache, retenter au prochain cycle
+            _LOGGER.info("OkoVision daily: données non disponibles (404), nouvelle tentative au prochain cycle (%s)", err)
             return self.data or {}
         except OkovisionApiError as err:
             # Autre erreur API : conserver le cache si disponible
@@ -162,6 +161,13 @@ class OkovisionDailyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return self.data
             raise UpdateFailed(f"Erreur API OkoVision (daily): {err}") from err
 
+        # is_new=False : OkoVision renvoie des valeurs par défaut, données J-1 pas encore prêtes.
+        # On conserve le cache sans marquer _last_fetched_date → retry au prochain cycle.
+        if not raw.get("is_new", True):
+            _LOGGER.info("OkoVision daily: is_new=false, données J-1 pas encore disponibles, nouvelle tentative au prochain cycle")
+            return self.data or {}
+
+        # is_new=True : données réelles disponibles
         self._last_fetched_date = date.today()
 
         result = {
