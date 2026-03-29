@@ -498,14 +498,23 @@ async def async_reset_history(
     all_ids = [*ext_ids, *entity_ids]
 
     try:
-        # Utilise le service recorder.clear_statistics qui gère lui-même
-        # le thread du recorder (évite "unsafe call not in recorder thread")
-        await hass.services.async_call(
-            "recorder",
-            "clear_statistics",
-            {"statistic_ids": all_ids},
-            blocking=True,
-        )
+        import asyncio  # noqa: PLC0415
+        from homeassistant.helpers.recorder import get_instance  # noqa: PLC0415
+
+        instance = get_instance(hass)
+
+        # async_clear_statistics est un @callback qui queue la tâche sur le thread
+        # recorder – thread-safe par construction, pas besoin d'executor.
+        # On utilise un Future pour attendre la complétion effective.
+        loop = asyncio.get_running_loop()
+        done: asyncio.Future[None] = loop.create_future()
+
+        def _on_done() -> None:
+            loop.call_soon_threadsafe(done.set_result, None)
+
+        instance.async_clear_statistics(all_ids, on_done=_on_done)
+        await done
+
     except Exception as err:  # noqa: BLE001
         _LOGGER.error(
             "OkoVision reset_history : échec suppression statistiques – %s: %s",
