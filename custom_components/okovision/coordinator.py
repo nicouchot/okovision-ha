@@ -161,14 +161,7 @@ class OkovisionDailyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return self.data
             raise UpdateFailed(f"Erreur API OkoVision (daily): {err}") from err
 
-        # is_new=False : OkoVision renvoie des valeurs par défaut, données J-1 pas encore prêtes.
-        # On conserve le cache sans marquer _last_fetched_date → retry au prochain cycle.
-        if not raw.get("is_new", True):
-            _LOGGER.info("OkoVision daily: is_new=false, données J-1 pas encore disponibles, nouvelle tentative au prochain cycle")
-            return self.data or {}
-
-        # is_new=True : données réelles disponibles
-        self._last_fetched_date = date.today()
+        is_new = raw.get("is_new", True)
 
         result = {
             "date":         _parse_date(raw.get("date")) or yesterday,
@@ -196,7 +189,16 @@ class OkovisionDailyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ),
         }
 
-        # Préserve les valeurs précédentes si l'API renvoie null sur certains champs
+        if not is_new:
+            # Données par défaut : sensors internes mis à jour avec les valeurs de l'API
+            # (y compris les zéros), mais pas de push stats externes et pas de
+            # _last_fetched_date → retry au prochain cycle.
+            _LOGGER.info("OkoVision daily: is_new=false, sensors mis à jour, stats externes ignorées, nouvelle tentative au prochain cycle")
+            return result
+
+        # is_new=True : données réelles confirmées – préserve les null éventuels,
+        # push stats externes + stop retry
+        self._last_fetched_date = date.today()
         result = _merge_with_previous(result, self.data)
 
         # ── Push automatique des statistiques externes pour J-1 ───────────────
