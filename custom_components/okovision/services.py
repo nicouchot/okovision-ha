@@ -617,8 +617,34 @@ async def async_reset_history(
         raise
 
     _LOGGER.info(
-        "OkoVision reset_history : %d séries supprimées "
-        "(%d depuis la base, %d depuis le registre, %d au total après dédup)",
-        len(all_ids), len(db_ids), len(fallback_ids), len(all_ids),
+        "OkoVision reset_history : statistiques supprimées "
+        "(%d IDs : %d base + %d registre après dédup)",
+        len(all_ids), len(db_ids), len(fallback_ids),
     )
+
+    # ── 4. Purge des états (table states) ─────────────────────────────────────
+    # async_clear_statistics ne touche que les tables de statistiques long-terme.
+    # Les valeurs enregistrées par le coordinator (polling temps réel) sont dans
+    # la table des états et persistent sans cette étape.
+    # recorder.purge_entities avec keep_days=0 vide intégralement cette table
+    # pour les entités concernées.
+    if entity_ids:
+        try:
+            await hass.services.async_call(
+                "recorder",
+                "purge_entities",
+                {"entity_id": entity_ids, "keep_days": 0},
+                blocking=True,
+            )
+            _LOGGER.info(
+                "OkoVision reset_history : états purgés pour %d entités",
+                len(entity_ids),
+            )
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning(
+                "OkoVision reset_history : purge des états échouée (%s: %s) – "
+                "les valeurs temps réel peuvent persister dans l'historique",
+                type(err).__name__, err,
+            )
+
     return len(all_ids)

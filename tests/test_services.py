@@ -150,6 +150,13 @@ class TestResetHistoryIdCollection:
         assert "sensor.okovision_cumul_cout_eur" in result
         assert "sensor.okovision_cumul_cout_chauffage" in result
 
+    def test_liste_vide_db_utilise_fallback(self):
+        """Si async_list_statistic_ids renvoie vide, le fallback seul est utilisé."""
+        db       = []
+        fallback = ["okovision:cumul_kwh", "sensor.okovision_cumul_kg"]
+        result   = self._build_all_ids(db, fallback)
+        assert result == fallback
+
     def test_filtre_prefixe_domaine(self):
         """Seuls les IDs du domaine okovision passent le filtre."""
         all_stats = [

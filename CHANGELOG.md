@@ -1,5 +1,19 @@
 # Changelog OkoVision HA
 
+## [0.5.26] – 2026-03-30
+### Corrigé
+- `reset_history` : les valeurs enregistrées par le coordinator (polling temps réel)
+  persistaient après reset car `async_clear_statistics` ne touche que les tables
+  de statistiques, pas la table des états (`states`)
+### Modifié
+- `async_reset_history` : ajout d'une étape 4 qui appelle `recorder.purge_entities`
+  avec `keep_days=0` sur toutes les entités OkoVision du registre
+  → vide intégralement la table des états pour repartir d'une base vierge
+- Echec de `purge_entities` logué en warning (non bloquant) pour ne pas masquer
+  le succès de la suppression des statistiques
+### Tests
+- `TestResetHistoryIdCollection.test_liste_vide_db_utilise_fallback` (1 cas)
+
 ## [0.5.25] – 2026-03-30
 ### Corrigé
 - `reset_history` : suppression incomplète quand des statistiques étaient stockées
