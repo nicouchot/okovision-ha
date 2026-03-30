@@ -548,31 +548,58 @@ async def async_reset_history(
 ) -> int:
     """Supprime toutes les statistiques OkoVision (externes + recorder entities).
 
-    Destiné à la phase de développement pour repartir de zéro.
-    N'efface pas les états actuels des entités, seulement leur historique
-    statistique dans le recorder.
+    Interroge le recorder pour obtenir la liste exhaustive des statistic_ids
+    réellement présents en base (capture les anciens IDs d'imports précédents,
+    les entités renommées, etc.), au lieu de déduire la liste depuis le registre.
     """
+    import asyncio  # noqa: PLC0415
+    from homeassistant.helpers.recorder import get_instance  # noqa: PLC0415
+    from homeassistant.components.recorder.statistics import (  # noqa: PLC0415
+        async_list_statistic_ids,
+    )
+
+    # ── 1. Tous les statistic_ids OkoVision présents en base ──────────────────
+    # Filtre par préfixe : statistiques externes (okovision:*) + entités HA
+    # (sensor.okovision_*, binary_sensor.okovision_*)
+    try:
+        all_stats = await async_list_statistic_ids(hass)
+        db_ids = [
+            s["statistic_id"] for s in all_stats
+            if (
+                s["statistic_id"].startswith(f"{DOMAIN}:")
+                or s["statistic_id"].startswith(f"sensor.{DOMAIN}_")
+                or s["statistic_id"].startswith(f"binary_sensor.{DOMAIN}_")
+            )
+        ]
+        _LOGGER.debug("OkoVision reset_history : %d IDs trouvés en base", len(db_ids))
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.warning(
+            "OkoVision reset_history : impossible de lister les stats en base (%s), "
+            "utilisation du registre comme fallback", err,
+        )
+        db_ids = []
+
+    # ── 2. Fallback : registre d'entités + stats externes connues ─────────────
+    # Garantit que les entités courantes sont toujours incluses même si
+    # async_list_statistic_ids ne les retourne pas encore (pas encore de données).
     from homeassistant.helpers import entity_registry as er  # noqa: PLC0415
 
-    # Statistiques externes
-    ext_ids = [f"{DOMAIN}:{cfg['entity_key']}" for cfg in EXTERNAL_STATS_CONFIG]
-
-    # Entity_ids de toutes les entités OkoVision
+    ext_ids    = [f"{DOMAIN}:{cfg['entity_key']}" for cfg in EXTERNAL_STATS_CONFIG]
     registry   = er.async_get(hass)
     entity_ids = [e.entity_id for e in er.async_entries_for_config_entry(registry, entry_id)]
+    fallback_ids = [*ext_ids, *entity_ids]
 
-    all_ids = [*ext_ids, *entity_ids]
+    # Union des deux sources, sans doublon
+    all_ids = list(dict.fromkeys([*db_ids, *fallback_ids]))
 
+    if not all_ids:
+        _LOGGER.info("OkoVision reset_history : aucune statistique à supprimer")
+        return 0
+
+    # ── 3. Suppression via Recorder.async_clear_statistics ────────────────────
     try:
-        import asyncio  # noqa: PLC0415
-        from homeassistant.helpers.recorder import get_instance  # noqa: PLC0415
-
         instance = get_instance(hass)
-
-        # async_clear_statistics est un @callback qui queue la tâche sur le thread
-        # recorder – thread-safe par construction, pas besoin d'executor.
-        # On utilise un Future pour attendre la complétion effective.
-        loop = asyncio.get_running_loop()
+        loop     = asyncio.get_running_loop()
         done: asyncio.Future[None] = loop.create_future()
 
         def _on_done() -> None:
@@ -583,14 +610,15 @@ async def async_reset_history(
 
     except Exception as err:  # noqa: BLE001
         _LOGGER.error(
-            "OkoVision reset_history : échec suppression statistiques – %s: %s",
+            "OkoVision reset_history : échec suppression – %s: %s",
             type(err).__name__, err,
             exc_info=True,
         )
         raise
 
     _LOGGER.info(
-        "OkoVision reset_history : %d séries supprimées (%d ext + %d entities)",
-        len(all_ids), len(ext_ids), len(entity_ids),
+        "OkoVision reset_history : %d séries supprimées "
+        "(%d depuis la base, %d depuis le registre, %d au total après dédup)",
+        len(all_ids), len(db_ids), len(fallback_ids), len(all_ids),
     )
     return len(all_ids)

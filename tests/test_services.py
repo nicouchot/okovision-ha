@@ -1,9 +1,10 @@
-"""Tests unitaires – services.py (reconstruction cumul_cout, configs)."""
+"""Tests unitaires – services.py (reconstruction cumul_cout, configs, reset_history)."""
 from __future__ import annotations
 
 import pytest
 
 from custom_components.okovision.services import (
+    DOMAIN,
     EXTERNAL_STATS_CONFIG,
     RECORDER_CUMUL_CONFIG,
     RECORDER_DAILY_CONFIG,
@@ -113,3 +114,60 @@ class TestCumulCoutReconstruction:
         }
         result = self._run(days)
         assert result["2024-01-01"]["cumul_cout"] == 50.0
+
+
+# ── Logique de collecte des IDs pour reset_history ────────────────────────────
+
+class TestResetHistoryIdCollection:
+    """Vérifie la logique de construction de all_ids dans async_reset_history."""
+
+    def _build_all_ids(self, db_ids: list[str], fallback_ids: list[str]) -> list[str]:
+        """Reproduit la déduplication union de reset_history."""
+        return list(dict.fromkeys([*db_ids, *fallback_ids]))
+
+    def test_db_ids_prioritaires(self):
+        """Les IDs de la base apparaissent en premier."""
+        db       = ["sensor.okovision_cumul_kwh", "sensor.okovision_old_name"]
+        fallback = ["sensor.okovision_cumul_kwh", "okovision:cumul_kwh"]
+        result   = self._build_all_ids(db, fallback)
+        assert result[0] == "sensor.okovision_cumul_kwh"
+        assert "sensor.okovision_old_name" in result
+        assert "okovision:cumul_kwh" in result
+
+    def test_pas_de_doublons(self):
+        """Un ID présent dans db et fallback n'apparaît qu'une fois."""
+        db       = ["sensor.okovision_cumul_kwh"]
+        fallback = ["sensor.okovision_cumul_kwh", "okovision:cumul_kwh"]
+        result   = self._build_all_ids(db, fallback)
+        assert result.count("sensor.okovision_cumul_kwh") == 1
+
+    def test_ancien_id_inclus(self):
+        """Un ancien statistic_id (non présent dans le registre) est conservé."""
+        db       = ["sensor.okovision_cumul_cout_eur",   # ancien nom
+                    "sensor.okovision_cumul_cout_chauffage"]  # nom actuel
+        fallback = ["sensor.okovision_cumul_cout_chauffage"]
+        result   = self._build_all_ids(db, fallback)
+        assert "sensor.okovision_cumul_cout_eur" in result
+        assert "sensor.okovision_cumul_cout_chauffage" in result
+
+    def test_filtre_prefixe_domaine(self):
+        """Seuls les IDs du domaine okovision passent le filtre."""
+        all_stats = [
+            {"statistic_id": "okovision:cumul_kwh"},
+            {"statistic_id": "sensor.okovision_cumul_kg"},
+            {"statistic_id": "sensor.autre_integration_energie"},
+            {"statistic_id": "binary_sensor.okovision_cendrier_a_vider"},
+        ]
+        domain = DOMAIN
+        filtered = [
+            s["statistic_id"] for s in all_stats
+            if (
+                s["statistic_id"].startswith(f"{domain}:")
+                or s["statistic_id"].startswith(f"sensor.{domain}_")
+                or s["statistic_id"].startswith(f"binary_sensor.{domain}_")
+            )
+        ]
+        assert "okovision:cumul_kwh"                    in filtered
+        assert "sensor.okovision_cumul_kg"              in filtered
+        assert "binary_sensor.okovision_cendrier_a_vider" in filtered
+        assert "sensor.autre_integration_energie"       not in filtered

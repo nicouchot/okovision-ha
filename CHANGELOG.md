@@ -1,5 +1,19 @@
 # Changelog OkoVision HA
 
+## [0.5.25] – 2026-03-30
+### Corrigé
+- `reset_history` : suppression incomplète quand des statistiques étaient stockées
+  sous un `statistic_id` absent du registre d'entités (entité renommée, ancien import)
+### Modifié
+- `async_reset_history` : interroge désormais `async_list_statistic_ids(hass)` pour
+  récupérer **tous** les IDs réellement présents en base préfixés par `okovision:`,
+  `sensor.okovision_` ou `binary_sensor.okovision_`
+- Union sans doublon des IDs base + registre (fallback) → garantit exhaustivité
+- Log détaillé : nb IDs depuis la base / depuis le registre / total après dédup
+### Tests
+- `TestResetHistoryIdCollection` (4 cas) : priorité DB, absence de doublons,
+  ancien ID inclus, filtre par préfixe de domaine
+
 ## [0.5.24] – 2026-03-30
 ### Ajouté
 - Structure de tests unitaires `tests/` (pytest, sans dépendance au runtime HA)
