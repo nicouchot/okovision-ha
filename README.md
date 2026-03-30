@@ -123,13 +123,42 @@ Ce service injecte l'historique complet dans le **recorder** de HA, ce qui perme
 
 ### Capteurs alimentés par l'import
 
+#### Consommation & énergie
+
 | Capteur | Contenu importé | Méthode |
 |---------|----------------|---------|
-| Énergie cumulée | Cumul kWh depuis l'origine | Valeur `cumul_kwh` de l'API |
-| Consommation cumulée pellets | Cumul kg depuis l'origine | Valeur `cumul_kg` de l'API |
-| Cycles cumulés | Cumul allumages depuis l'origine | Valeur `cumul_cycle` de l'API |
-| Coût cumulé chauffage | Coût total calculé | ∑(conso_kwh/j × prix_kwh/j) |
-| Prix énergie (€/kWh) | Évolution historique du prix | Valeur `prix_kwh` de l'API |
+| Hier – Consommation pellets | Conso journalière kg | `conso_kg` mensuel |
+| Hier – Consommation pellets ECS | Conso journalière kg ECS | `conso_ecs_kg` mensuel |
+| Hier – Énergie produite | Énergie journalière kWh | `conso_kwh` mensuel |
+| Hier – Cycles chaudière | Allumages du jour | `nb_cycle` mensuel |
+| Hier – DJU | Degrés-Jours Unifiés | `dju` mensuel |
+| Cumul – Énergie | Cumul kWh depuis l'origine | `cumul_kwh` mensuel |
+| Cumul – Consommation pellets | Cumul kg depuis l'origine | `cumul_kg` mensuel |
+| Cumul – Cycles | Cumul allumages depuis l'origine | `cumul_cycle` mensuel |
+| Cumul – Coût chauffage | Coût total | `cumul_cout` ou ∑(kWh×€/kWh) |
+
+#### Silo & Cendrier
+
+| Capteur | Contenu importé | Méthode |
+|---------|----------------|---------|
+| Silo – Pellets restants | Stock estimé en fin de journée (kg) | `silo_pellets_restants` mensuel |
+| Silo – Niveau | Taux de remplissage en fin de journée (%) | `silo_niveau` mensuel |
+| Cendrier – Capacité restante | Capacité restante en fin de journée (kg) | `cendrier_capacite_restante` mensuel |
+| Cendrier – Niveau de remplissage | Taux de remplissage en fin de journée (%) | `cendrier_niveau_de_remplissage` mensuel |
+
+#### Prix
+
+| Capteur | Contenu importé | Méthode |
+|---------|----------------|---------|
+| Prix pellets (€/kg) | Évolution historique du prix | `prix_kg` mensuel |
+| Prix énergie (€/kWh) | Évolution historique du prix | `prix_kwh` mensuel |
+
+#### Températures
+
+| Capteur | Contenu importé | Méthode |
+|---------|----------------|---------|
+| Hier – Température extérieure max | Température max (°C) | `tc_ext_max` mensuel, interpolation |
+| Hier – Température extérieure min | Température min (°C) | `tc_ext_min` mensuel, interpolation |
 
 ### Comment lancer l'import
 

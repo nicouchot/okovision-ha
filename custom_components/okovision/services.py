@@ -129,6 +129,19 @@ RECORDER_TEMP_CONFIG: list[dict[str, Any]] = [
     {"key": "tc_ext_min", "unit": UnitOfTemperature.CELSIUS},
 ]
 
+# ── E) Statistiques RECORDER – snapshot quotidien (silo, cendrier, prix) ───────
+# Une entrée par jour à minuit, mean = valeur de fin de journée.
+# Sources : action=monthly (champs dédiés) + action=today (structure imbriquée).
+
+RECORDER_SNAPSHOT_CONFIG: list[dict[str, Any]] = [
+    {"key": "silo_remains_kg",   "api_key": "silo_pellets_restants",          "unit": UnitOfMass.KILOGRAMS},
+    {"key": "silo_percent",      "api_key": "silo_niveau",                    "unit": "%"},
+    {"key": "ashtray_remains_kg","api_key": "cendrier_capacite_restante",     "unit": UnitOfMass.KILOGRAMS},
+    {"key": "ashtray_percent",   "api_key": "cendrier_niveau_de_remplissage", "unit": "%"},
+    {"key": "prix_kg",           "api_key": "prix_kg",                        "unit": "EUR/kg"},
+    {"key": "prix_kwh",          "api_key": "prix_kwh",                       "unit": "EUR/kWh"},
+]
+
 
 # ── Push automatique J-1 (appelé par DailyCoordinator) ────────────────────────
 
@@ -239,11 +252,22 @@ async def async_import_history(
         today_str = today.isoformat()
         today_day: dict[str, Any] = {"date": today_str}
         for k in ("cumul_kwh", "cumul_kg", "cumul_cycle", "cumul_cout", "prix_kwh",
-                  "conso_kwh", "conso_kg", "conso_ecs_kg", "nb_cycle",
+                  "prix_kg", "conso_kwh", "conso_kg", "conso_ecs_kg", "nb_cycle",
                   "tc_ext_max", "tc_ext_min", "dju"):
             v = today_raw.get(k)
             if v is not None:
                 today_day[k] = v
+        # Silo et cendrier – structure imbriquée dans action=today
+        silo_t    = today_raw.get("silo") or {}
+        ashtray_t = today_raw.get("ashtray") or {}
+        for api_key, v in (
+            ("silo_pellets_restants",          silo_t.get("remains_kg")),
+            ("silo_niveau",                    silo_t.get("percent")),
+            ("cendrier_capacite_restante",     ashtray_t.get("remains_kg")),
+            ("cendrier_niveau_de_remplissage", ashtray_t.get("percent")),
+        ):
+            if v is not None:
+                today_day[api_key] = v
         if len(today_day) > 1:
             all_days[today_str] = today_day
     except OkovisionApiError as err:
@@ -466,6 +490,48 @@ async def async_import_history(
                 _LOGGER.info(
                     "OkoVision import ✓ [rec] %-18s → %4d jours | %s",
                     key, len(statistics) // 2, entity_id,
+                )
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.error("OkoVision import ✗ [rec] '%s' → %s", key, err)
+
+    # ── 7. Snapshot quotidien – silo, cendrier, prix (mean par jour) ─────────────
+    for cfg in RECORDER_SNAPSHOT_CONFIG:
+        key       = cfg["key"]
+        api_key   = cfg["api_key"]
+        entity_id = entity_map.get(key)
+        if not entity_id:
+            _LOGGER.debug("OkoVision import : entité '%s' introuvable, ignoré", key)
+            continue
+
+        metadata = _make_metadata(
+            statistic_id=entity_id, source="recorder", name=entity_id,
+            unit=cfg["unit"], has_mean=True, has_sum=False,
+        )
+        statistics = []
+
+        for day in sorted_days:
+            try:
+                day_date = date.fromisoformat(str(day["date"]))
+                midnight = datetime.combine(day_date, time.min).replace(tzinfo=tz)
+            except (ValueError, TypeError, KeyError):
+                continue
+
+            raw = day.get(api_key)
+            if raw is None:
+                continue
+            try:
+                value = float(raw)
+            except (ValueError, TypeError):
+                continue
+            statistics.append(StatisticData(start=midnight, mean=value))
+
+        if statistics:
+            try:
+                async_import_statistics(hass, metadata, statistics)
+                summary[f"recorder_{key}"] = len(statistics)
+                _LOGGER.info(
+                    "OkoVision import ✓ [rec] %-22s → %4d jours | %s",
+                    key, len(statistics), entity_id,
                 )
             except Exception as err:  # noqa: BLE001
                 _LOGGER.error("OkoVision import ✗ [rec] '%s' → %s", key, err)
