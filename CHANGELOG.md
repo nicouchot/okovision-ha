@@ -1,5 +1,18 @@
 # Changelog OkoVision HA
 
+## [0.5.24] – 2026-03-30
+### Ajouté
+- Structure de tests unitaires `tests/` (pytest, sans dépendance au runtime HA)
+  - `conftest.py` : stubs minimalistes pour tous les modules HA requis
+  - `test_coordinator.py` : `_parse_date` (5 cas) + `_merge_with_previous` (5 cas)
+  - `test_services.py` : intégrité des configs + reconstruction `cumul_cout` (4 cas)
+  - `test_api.py` : gestion erreurs HTTP 401, 404, champ error JSON, connexion (5 cas)
+  - `tests/requirements-test.txt` : `pytest`, `pytest-asyncio`, `aiohttp`
+- 25 tests passent (`pytest tests/`)
+### Règles de travail ajoutées
+- Commit messages détaillés (fichiers touchés, comportement avant/après)
+- Tests unitaires écrits à chaque demande pertinente
+
 ## [0.5.23] – 2026-03-30
 ### Ajouté
 - `import_history` : import de 6 nouvelles séries historiques depuis `action=monthly`
