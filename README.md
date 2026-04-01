@@ -6,6 +6,11 @@
 Intégration Home Assistant pour le système de monitoring chaudière à pellets **OkoVision**.
 Se connecte à `ha_api.php` via polling REST local.
 
+> **Prérequis – API OkoVision**
+> Cette intégration exploite les données exposées par le serveur **OkoVision API Home Assistant**,
+> disponible sur [github.com/nicouchot/okovision-api-ha](https://github.com/nicouchot/okovision-api-ha).
+> Ce serveur doit être installé et accessible sur votre réseau local avant de configurer l'intégration.
+
 ---
 
 ## Installation via HACS
