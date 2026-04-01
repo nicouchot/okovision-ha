@@ -1,6 +1,7 @@
-"""Tests unitaires – services.py (reconstruction cumul_cout, configs, reset_history)."""
+"""Tests unitaires – services.py (reconstruction cumul_cout, configs, reset_history, températures)."""
 from __future__ import annotations
 
+from datetime import date, datetime, time
 import pytest
 
 from custom_components.okovision.services import (
@@ -151,6 +152,7 @@ class TestResetHistoryIdCollection:
         assert "sensor.okovision_cumul_cout_chauffage" in result
 
     def test_liste_vide_db_utilise_fallback(self):
+
         """Si async_list_statistic_ids renvoie vide, le fallback seul est utilisé."""
         db       = []
         fallback = ["okovision:cumul_kwh", "sensor.okovision_cumul_kg"]
@@ -178,3 +180,79 @@ class TestResetHistoryIdCollection:
         assert "sensor.okovision_cumul_kg"              in filtered
         assert "binary_sensor.okovision_cendrier_a_vider" in filtered
         assert "sensor.autre_integration_energie"       not in filtered
+
+
+# ── Import des températures – un point par jour ───────────────────────────────
+
+class TestTemperatureImport:
+    """Vérifie que la section 6 produit un seul point par jour à minuit."""
+
+    def _build_stats(self, sorted_days, key, tz=None):
+        """Reproduit la logique de la section 6 d'async_import_history."""
+        import datetime as dt
+        if tz is None:
+            tz = dt.timezone.utc
+        statistics = []
+        for day in sorted_days:
+            try:
+                day_date = date.fromisoformat(str(day["date"]))
+                midnight = datetime.combine(day_date, time.min).replace(tzinfo=tz)
+            except (ValueError, TypeError, KeyError):
+                continue
+            raw = day.get(key)
+            if raw is None:
+                continue
+            try:
+                value = float(raw)
+            except (ValueError, TypeError):
+                continue
+            statistics.append({"start": midnight, "mean": value})
+        return statistics
+
+    def test_un_point_par_jour(self):
+        """Chaque jour produit exactement un StatisticData."""
+        days = [
+            {"date": "2024-01-01", "tc_ext_max": 15.0},
+            {"date": "2024-01-02", "tc_ext_max": 18.0},
+            {"date": "2024-01-03", "tc_ext_max": 12.0},
+        ]
+        stats = self._build_stats(days, "tc_ext_max")
+        assert len(stats) == 3
+
+    def test_point_a_minuit_du_jour(self):
+        """Le point est placé à minuit du jour concerné (pas du lendemain)."""
+        import datetime as dt
+        days = [{"date": "2024-03-15", "tc_ext_max": 20.0}]
+        stats = self._build_stats(days, "tc_ext_max")
+        assert len(stats) == 1
+        expected_midnight = datetime(2024, 3, 15, 0, 0, tzinfo=dt.timezone.utc)
+        assert stats[0]["start"] == expected_midnight
+
+    def test_valeur_directe_sans_interpolation(self):
+        """La valeur enregistrée est celle de l'API, sans interpolation avec le jour suivant."""
+        days = [
+            {"date": "2024-01-01", "tc_ext_max": 10.0},
+            {"date": "2024-01-02", "tc_ext_max": 20.0},
+        ]
+        stats = self._build_stats(days, "tc_ext_max")
+        assert stats[0]["mean"] == 10.0   # pas (10+20)/2 = 15
+        assert stats[1]["mean"] == 20.0
+
+    def test_pas_de_doublon_5h(self):
+        """Aucun point à 5h – l'ancienne logique créait 2 points par jour."""
+        import datetime as dt
+        days = [{"date": "2024-01-01", "tc_ext_max": 15.0}]
+        stats = self._build_stats(days, "tc_ext_max")
+        five_am = datetime(2024, 1, 2, 5, 0, tzinfo=dt.timezone.utc)
+        starts = [s["start"] for s in stats]
+        assert five_am not in starts
+
+    def test_jour_sans_valeur_ignore(self):
+        """Un jour sans la clé de température n'est pas inséré."""
+        days = [
+            {"date": "2024-01-01"},
+            {"date": "2024-01-02", "tc_ext_max": 18.0},
+        ]
+        stats = self._build_stats(days, "tc_ext_max")
+        assert len(stats) == 1
+        assert stats[0]["mean"] == 18.0

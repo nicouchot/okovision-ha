@@ -288,8 +288,7 @@ async def async_import_history(
             )
             day["cumul_cout"] = running_cout
 
-    sorted_days   = sorted(all_days.values(), key=lambda d: d["date"])
-    days_by_date  = {d["date"]: d for d in sorted_days}
+    sorted_days = sorted(all_days.values(), key=lambda d: d["date"])
 
     _LOGGER.info("OkoVision import_history : %d jours – injection…", len(sorted_days))
     summary: dict[str, int] = {}
@@ -445,7 +444,10 @@ async def async_import_history(
             except Exception as err:  # noqa: BLE001
                 _LOGGER.error("OkoVision import ✗ [rec] '%s' → %s", key, err)
 
-    # ── 6. Températures – interpolation douce à minuit ────────────────────────
+    # ── 6. Températures – un point par jour à minuit ──────────────────────────
+    # Un seul StatisticData par jour à minuit avec la valeur de l'API.
+    # L'ancienne logique "interpolation douce" (2 points : minuit J+1 + 5h J+1)
+    # créait un effet d'escalier visible dans le graphe HA.
     for cfg in RECORDER_TEMP_CONFIG:
         key       = cfg["key"]
         entity_id = entity_map.get(key)
@@ -462,6 +464,7 @@ async def async_import_history(
         for day in sorted_days:
             try:
                 day_date = date.fromisoformat(str(day["date"]))
+                midnight = datetime.combine(day_date, time.min).replace(tzinfo=tz)
             except (ValueError, TypeError, KeyError):
                 continue
             raw = day.get(key)
@@ -471,25 +474,15 @@ async def async_import_history(
                 value = float(raw)
             except (ValueError, TypeError):
                 continue
-
-            next_date_str = (day_date + timedelta(days=1)).isoformat()
-            next_raw      = days_by_date.get(next_date_str, {}).get(key)
-            next_value    = float(next_raw) if next_raw is not None else value
-
-            next_day = day_date + timedelta(days=1)
-            midnight = datetime.combine(next_day, time(0, 0)).replace(tzinfo=tz)
-            five_am  = datetime.combine(next_day, time(5, 0)).replace(tzinfo=tz)
-
-            statistics.append(StatisticData(start=midnight, mean=round((value + next_value) / 2.0, 2)))
-            statistics.append(StatisticData(start=five_am,  mean=value))
+            statistics.append(StatisticData(start=midnight, mean=value))
 
         if statistics:
             try:
                 async_import_statistics(hass, metadata, statistics)
-                summary[f"recorder_{key}"] = len(statistics) // 2
+                summary[f"recorder_{key}"] = len(statistics)
                 _LOGGER.info(
                     "OkoVision import ✓ [rec] %-18s → %4d jours | %s",
-                    key, len(statistics) // 2, entity_id,
+                    key, len(statistics), entity_id,
                 )
             except Exception as err:  # noqa: BLE001
                 _LOGGER.error("OkoVision import ✗ [rec] '%s' → %s", key, err)

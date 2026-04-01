@@ -1,5 +1,20 @@
 # Changelog OkoVision HA
 
+## [0.5.27] – 2026-04-01
+### Corrigé
+- `import_history` section 6 : les sensors `tc_ext_max` et `tc_ext_min` affichaient
+  un effet "escalier" dans le graphe HA — deux paliers par jour (minuit J+1 + 5h J+1)
+  au lieu d'une valeur plate sur toute la journée
+### Modifié
+- Section 6 (`RECORDER_TEMP_CONFIG`) : suppression de la logique "interpolation douce"
+  (2 points par jour : moyenne interpolée à minuit J+1, valeur réelle à 5h J+1)
+  → remplacée par un seul `StatisticData(start=minuit_J, mean=valeur_API)`
+  identique au pattern des sections 5 et 7 (cumul, snapshot)
+- Suppression de `days_by_date` devenu inutilisé
+### Tests
+- `TestTemperatureImport` (5 cas) : un point par jour, placement à minuit du jour J,
+  valeur directe sans interpolation, absence de point à 5h, jour sans valeur ignoré
+
 ## [0.5.26] – 2026-03-30
 ### Corrigé
 - `reset_history` : les valeurs enregistrées par le coordinator (polling temps réel)
