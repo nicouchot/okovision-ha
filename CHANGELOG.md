@@ -1,5 +1,15 @@
 # Changelog OkoVision HA
 
+## [0.5.28] – 2026-04-02
+### Corrigé
+- CI : le body des releases GitHub ne contenait que le lien "Full Changelog"
+  (généré par `--generate-notes`) sans notes lisibles — HACS affichait un
+  écran "Update" vide
+### Modifié
+- `.github/workflows/release.yml` : remplacement de `--generate-notes` par
+  extraction du bloc correspondant à la version dans `CHANGELOG.md` via `awk`
+  → le body de chaque release contient désormais les notes du changelog
+
 ## [0.5.27] – 2026-04-01
 ### Corrigé
 - `import_history` section 6 : les sensors `tc_ext_max` et `tc_ext_min` affichaient
