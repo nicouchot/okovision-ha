@@ -218,6 +218,39 @@ Dans **Paramètres → Énergie**, sur la source **Énergie cumulée** :
 - **Suivre les coûts** → *Utiliser une entité de suivi des coûts totaux*
 - Sélectionner : **Coût cumulé chauffage** (EUR)
 
+### Statistiques externes (`okovision:*`)
+
+| Statistique | Unité | Usage |
+|-------------|-------|-------|
+| `okovision:cumul_kwh` | kWh | Source « gaz » du tableau Énergie |
+| `okovision:cumul_cout_eur` | EUR | Coût du chauffage dans le tableau Énergie |
+| `okovision:cumul_kg` | kg | Consommation de pellets par jour dans les graphes |
+
+Elles sont **datées du jour de consommation** (minuit de J) : la variation
+journalière (`change`) d'un jour correspond exactement à ce qui a été consommé
+ce jour-là. Elles sont alimentées par `import_history` (historique) puis
+automatiquement chaque jour par le coordinator.
+
+À l'inverse, le capteur **Hier – Consommation pellets** n'est publié que le
+lendemain : ses statistiques attribuent la consommation de J au jour J+1. Pour un
+graphe journalier des pellets aligné sur les kWh, utiliser `okovision:cumul_kg` :
+
+```yaml
+type: statistics-graph
+chart_type: bar
+period: day
+days_to_show: 7
+stat_types: [change]
+entities:
+  - entity: okovision:cumul_kwh
+    name: Énergie chaudière (kWh)
+  - entity: okovision:cumul_kg
+    name: Pellets (kg)
+```
+
+Après la mise à jour vers 0.5.29, relancer `okovision.import_history` une fois pour
+remplir l'historique de `okovision:cumul_kg`.
+
 ---
 
 ## API utilisée

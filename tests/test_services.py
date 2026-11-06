@@ -24,6 +24,19 @@ class TestConfigs:
             assert "unit" in cfg
             assert "has_sum" in cfg
 
+    def test_external_stats_inclut_cumul_kg(self):
+        """okovision:cumul_kg existe, en kg, avec sum (variation journalière exploitable)."""
+        cfg = {c["entity_key"]: c for c in EXTERNAL_STATS_CONFIG}
+        assert "cumul_kg" in cfg
+        assert cfg["cumul_kg"]["api_key"] == "cumul_kg"
+        assert cfg["cumul_kg"]["unit"] == "kg"
+        assert cfg["cumul_kg"]["has_sum"] is True
+        assert cfg["cumul_kg"]["has_mean"] is False
+
+    def test_external_stats_cles_uniques(self):
+        keys = [c["entity_key"] for c in EXTERNAL_STATS_CONFIG]
+        assert len(keys) == len(set(keys))
+
     def test_recorder_daily_have_required_keys(self):
         for cfg in RECORDER_DAILY_CONFIG:
             assert "key" in cfg
@@ -256,3 +269,53 @@ class TestTemperatureImport:
         stats = self._build_stats(days, "tc_ext_max")
         assert len(stats) == 1
         assert stats[0]["mean"] == 18.0
+
+
+# ── Push quotidien des statistiques externes ──────────────────────────────────
+
+class TestPushDailyStats:
+    """Vérifie qu'async_push_daily_stats date chaque statistique du jour J (minuit)."""
+
+    def _run(self, monkeypatch, daily_data):
+        import asyncio
+        from custom_components.okovision import services
+
+        calls = []
+        monkeypatch.setattr(services, "_make_metadata", lambda **kw: kw)
+        monkeypatch.setattr(services, "StatisticData", lambda **kw: kw)
+        monkeypatch.setattr(
+            services, "async_add_external_statistics",
+            lambda hass, metadata, stats: calls.append((metadata, stats)),
+        )
+        asyncio.run(services.async_push_daily_stats(None, daily_data))
+        return {meta["statistic_id"]: (meta, stats) for meta, stats in calls}
+
+    def test_cumul_kg_pousse_a_minuit_du_jour(self, monkeypatch):
+        import datetime as dt
+        pushed = self._run(monkeypatch, {
+            "date": date(2026, 11, 5),
+            "cumul_kwh": 25511.05, "cumul_cout_eur": 3704.69, "cumul_kg": 7076.94,
+        })
+        assert f"{DOMAIN}:cumul_kg" in pushed
+        meta, stats = pushed[f"{DOMAIN}:cumul_kg"]
+        assert meta["unit"] == "kg"
+        assert meta["source"] == DOMAIN
+        assert len(stats) == 1
+        assert stats[0]["start"] == datetime(2026, 11, 5, 0, 0, tzinfo=dt.timezone.utc)
+        assert stats[0]["sum"] == pytest.approx(7076.94)
+
+    def test_meme_date_que_cumul_kwh(self, monkeypatch):
+        """kg et kWh partagent la même date : plus de décalage d'un jour entre eux."""
+        pushed = self._run(monkeypatch, {
+            "date": date(2026, 11, 5), "cumul_kwh": 25511.05, "cumul_kg": 7076.94,
+        })
+        assert pushed[f"{DOMAIN}:cumul_kg"][1][0]["start"] == pushed[f"{DOMAIN}:cumul_kwh"][1][0]["start"]
+
+    def test_cumul_kg_absent_ignore(self, monkeypatch):
+        pushed = self._run(monkeypatch, {"date": date(2026, 11, 5), "cumul_kwh": 25511.05})
+        assert f"{DOMAIN}:cumul_kg" not in pushed
+        assert f"{DOMAIN}:cumul_kwh" in pushed
+
+    def test_sans_date_rien_pousse(self, monkeypatch):
+        pushed = self._run(monkeypatch, {"cumul_kg": 7076.94})
+        assert pushed == {}

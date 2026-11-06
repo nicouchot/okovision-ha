@@ -3,7 +3,8 @@
 Deux types de statistiques sont gérées :
 
 A) STATISTIQUES EXTERNES (source=DOMAIN, id="okovision:xxx")
-   → Uniquement cumul_kwh et cumul_cout_eur (tableau Énergie HA)
+   → cumul_kwh et cumul_cout_eur (tableau Énergie HA), cumul_kg (pellets)
+   → Datées du jour de consommation (minuit de J), et non du jour de publication
    → Mises à jour automatiquement après chaque fetch du DailyCoordinator
 
 B) STATISTIQUES RECORDER (source="recorder", id=entity_id)
@@ -75,7 +76,10 @@ except ImportError:
 
 
 # ── A) Statistiques EXTERNES (source=DOMAIN) ──────────────────────────────────
-# Seulement cumul_kwh et cumul_cout_eur pour le tableau Énergie HA.
+# cumul_kwh et cumul_cout_eur pour le tableau Énergie HA.
+# cumul_kg pour les graphes de consommation de pellets : contrairement au
+# sensor « Hier – Consommation pellets » (publié le lendemain, donc compté sur
+# J+1 par les statistiques), la statistique externe est datée du jour J.
 
 EXTERNAL_STATS_CONFIG: list[dict[str, Any]] = [
     {
@@ -92,6 +96,15 @@ EXTERNAL_STATS_CONFIG: list[dict[str, Any]] = [
         "api_key":    "cumul_cout",
         "name":       "OkoVision – Coût cumulé chauffage",
         "unit":       "EUR",
+        "has_sum":    True,
+        "has_mean":   False,
+    },
+    {
+        # Pellets cumulés – variation journalière = consommation du jour J
+        "entity_key": "cumul_kg",
+        "api_key":    "cumul_kg",
+        "name":       "OkoVision – Pellets cumulés",
+        "unit":       UnitOfMass.KILOGRAMS,
         "has_sum":    True,
         "has_mean":   False,
     },
@@ -149,7 +162,7 @@ async def async_push_daily_stats(
     hass: HomeAssistant,
     daily_data: dict[str, Any],
 ) -> None:
-    """Pousse les statistiques externes (cumul_kwh, cumul_cout_eur) pour J-1.
+    """Pousse les statistiques externes (cumul_kwh, cumul_cout_eur, cumul_kg) pour J-1.
 
     Appelée automatiquement après chaque fetch réussi du DailyCoordinator.
     """
@@ -196,7 +209,7 @@ async def async_import_history(
 ) -> dict[str, int]:
     """Backfill 4 ans d'historique dans le recorder HA.
 
-    - Externes   : okovision:cumul_kwh, okovision:cumul_cout_eur
+    - Externes   : okovision:cumul_kwh, okovision:cumul_cout_eur, okovision:cumul_kg
     - Recorder   : crénelage (conso_*, nb_cycle, dju), courbe (cumul_*), températures
     """
     tz         = dt_util.get_default_time_zone()

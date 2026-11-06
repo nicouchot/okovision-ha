@@ -1,5 +1,23 @@
 # Changelog OkoVision HA
 
+## [0.5.29] – 2026-11-06
+### Ajouté
+- Statistique externe `okovision:cumul_kg` (pellets cumulés, kg) dans
+  `EXTERNAL_STATS_CONFIG` : poussée chaque jour par le coordinator et remplie
+  par `import_history`, supprimée par `reset_history` comme les autres `okovision:*`
+### Corrigé
+- Graphes de pellets décalés d'un jour : le capteur « Hier – Consommation pellets »
+  est publié le lendemain, ses statistiques comptaient la consommation de J sur J+1.
+  `okovision:cumul_kg` est datée de minuit de J, comme `okovision:cumul_kwh` :
+  kg et kWh d'un même jour sont désormais alignés
+### Documentation
+- README : section « Statistiques externes » (liste, datation, exemple de graphe,
+  relance d'`import_history` après mise à jour)
+### Tests
+- `TestConfigs` : présence et paramètres de `cumul_kg`, unicité des clés externes
+- `TestPushDailyStats` (4 cas) : datation à minuit de J, même date que `cumul_kwh`,
+  valeur absente ignorée, aucune poussée sans date
+
 ## [0.5.28] – 2026-04-02
 ### Corrigé
 - CI : le body des releases GitHub ne contenait que le lien "Full Changelog"

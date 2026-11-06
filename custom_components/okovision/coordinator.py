@@ -106,7 +106,7 @@ class OkovisionDailyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     date fetched pour éviter des requêtes inutiles.
 
     Après chaque fetch réussi de nouvelles données J-1, pousse automatiquement
-    une entrée dans les statistiques externes (okovision:cumul_kwh, etc.) pour
+    une entrée dans les statistiques externes (okovision:cumul_kwh, cumul_kg…) pour
     que le tableau Énergie soit à jour sans avoir à relancer import_history.
 
     Données retournées :
@@ -202,8 +202,8 @@ class OkovisionDailyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         result = _merge_with_previous(result, self.data)
 
         # ── Push automatique des statistiques externes pour J-1 ───────────────
-        # Maintient okovision:cumul_kwh / cumul_cout_eur à jour dans le tableau
-        # Énergie sans nécessiter de relancer le service import_history.
+        # Maintient okovision:cumul_kwh / cumul_cout_eur / cumul_kg à jour (tableau
+        # Énergie, graphes pellets) sans nécessiter de relancer import_history.
         try:
             from .services import async_push_daily_stats  # import local pour éviter le cycle
             await async_push_daily_stats(self.hass, result)
