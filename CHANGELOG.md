@@ -12,7 +12,8 @@
   fichier `release_notes.md`, puis passées à `gh release create --notes-file` ;
   la version est transmise par variable d'environnement. Le contenu du CHANGELOG
   n'est plus jamais interprété par le shell
-- Notes de la release 0.5.29 rétablies sur GitHub à partir du CHANGELOG
+- Notes de la release 0.5.29 : à rétablir à la main sur GitHub (Releases →
+  0.5.29 → Edit) en recopiant la section `[0.5.29]` ci-dessous
 
 ## [0.5.29] – 2026-11-06
 ### Ajouté
