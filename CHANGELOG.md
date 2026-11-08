@@ -1,5 +1,19 @@
 # Changelog OkoVision HA
 
+## [Non publié]
+### Corrigé
+- CI release : les mots entre accents graves du CHANGELOG disparaissaient des notes
+  de release (ex. notes de 0.5.29 : « Statistique externe  (pellets cumulés, kg) »).
+  Le texte était injecté tel quel dans le script shell via
+  `--notes "${{ steps.changelog.outputs.notes }}"`, et chaque `…` était exécuté
+  comme une commande
+### Modifié
+- `.github/workflows/release.yml` : les notes sont extraites par `awk` dans un
+  fichier `release_notes.md`, puis passées à `gh release create --notes-file` ;
+  la version est transmise par variable d'environnement. Le contenu du CHANGELOG
+  n'est plus jamais interprété par le shell
+- Notes de la release 0.5.29 rétablies sur GitHub à partir du CHANGELOG
+
 ## [0.5.29] – 2026-11-06
 ### Ajouté
 - Statistique externe `okovision:cumul_kg` (pellets cumulés, kg) dans

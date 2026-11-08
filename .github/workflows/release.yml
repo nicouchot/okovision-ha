@@ -36,20 +36,28 @@ jobs:
           fi
 
       - name: Extract changelog for this version
-        id: changelog
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          NOTES=$(awk "/^## \[$VERSION\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md)
-          echo "notes<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$NOTES" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          # Écrit les notes dans un fichier : le texte du CHANGELOG n'est jamais
+          # injecté dans le script shell (les `accents graves` restent du texte).
+          awk -v header="## [$VERSION]" '
+            index($0, header) == 1 { found = 1; next }
+            found && /^## \[/      { exit }
+            found                  { print }
+          ' CHANGELOG.md > release_notes.md
+          if [ ! -s release_notes.md ]; then
+            echo "Aucune section ## [$VERSION] dans CHANGELOG.md" > release_notes.md
+          fi
+          cat release_notes.md
 
       - name: Create release
         if: steps.check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          gh release create "${{ steps.version.outputs.version }}" \
-            --title "v${{ steps.version.outputs.version }}" \
-            --notes "${{ steps.changelog.outputs.notes }}" \
+          gh release create "$VERSION" \
+            --title "v$VERSION" \
+            --notes-file release_notes.md \
             --target main
